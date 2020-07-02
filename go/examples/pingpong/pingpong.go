@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+	//"github.com/lucas-clemente/quic-go/interop/utils"
 
 	"github.com/scionproto/scion/go/lib/addr"
 	"github.com/scionproto/scion/go/lib/common"
@@ -54,6 +55,8 @@ const (
 	TSLen           = 8
 	ModeServer      = "server"
 	ModeClient      = "client"
+
+	errorNoError quic.ErrorCode = 0x100
 )
 
 var (
@@ -73,6 +76,11 @@ var (
 	timeout     = flag.Duration("timeout", DefaultTimeout, "Timeout for the ping response")
 	verbose     = flag.Bool("v", false, "sets verbose output")
 	logConsole  string
+
+	// No way to extract error code from error returned after closing session in quic-go.
+	// c.f. https://github.com/lucas-clemente/quic-go/issues/2441
+	// Workaround by string comparison with known formated error string.
+	errorNoErrorString = fmt.Sprintf("Application error %#x", uint64(errorNoError))
 )
 
 func init() {
@@ -147,16 +155,21 @@ func initNetwork() {
 	log.Debug("QUIC/SCION successfully initialized")
 }
 
+// PingPong either contains "ping" or "pong"
+// Data contains the
 type message struct {
 	PingPong  string
 	Data      []byte
 	Timestamp int64
+	Text	  string
 }
 
 func requestMsg() *message {
 	return &message{
 		PingPong: ReqMsg,
 		Data:     fileData,
+		Text:     "a",
+		Timestamp: 20,
 	}
 }
 
@@ -165,6 +178,7 @@ func replyMsg(request *message) *message {
 		ReplyMsg,
 		request.Data,
 		request.Timestamp,
+		request.Text,
 	}
 }
 
@@ -172,6 +186,7 @@ func (m *message) len() int {
 	return len(m.PingPong) + len(m.Data) + 8
 }
 
+// encoder and decoder is linked to qstream. if written to it, sent automatically
 type quicStream struct {
 	qstream quic.Stream
 	encoder *gob.Encoder
@@ -237,17 +252,23 @@ func (c *client) run() {
 		LogFatal("Unable to dial", "err", err)
 	}
 
-	qstream, err := c.qsess.OpenStreamSync()
+	qstream, err := c.qsess.OpenStreamSync(context.Background())
 	if err != nil {
 		LogFatal("quic OpenStream failed", "err", err)
 	}
 	c.quicStream = newQuicStream(qstream)
 	log.Debug("Quic stream opened", "local", &local, "remote", &remote)
-	go func() {
-		defer log.HandlePanic()
-		c.send()
-	}()
-	c.read()
+
+	// Do it concurrently
+// 	go func() {
+// 		defer log.HandlePanic()
+// 		c.send()
+// 	}()
+	//time.Sleep(5)
+	c.send()
+
+
+	//c.read()
 }
 
 func (c *client) Close() error {
@@ -261,7 +282,7 @@ func (c *client) Close() error {
 		// E.g. if you are just sending something to a server and closing the session immediately
 		// it might be that the server does not see the message.
 		// See also: https://github.com/lucas-clemente/quic-go/issues/464
-		err = c.qsess.Close()
+		err = c.qsess.CloseWithError(errorNoError, "")
 	}
 	return err
 }
@@ -273,10 +294,11 @@ func (c client) setupPath() {
 			LogFatal("No paths available to remote destination")
 		}
 		remote.Path = path.Path()
-		remote.NextHop = path.OverlayNextHop()
+		remote.NextHop = path.UnderlayNextHop()
 	}
 }
 
+// Client send
 func (c client) send() {
 	for i := 0; i < *count || *count == 0; i++ {
 		if i != 0 && *interval != 0 {
@@ -287,11 +309,21 @@ func (c client) send() {
 		// Send ping message to destination
 		before := time.Now()
 		reqMsg.Timestamp = before.UnixNano()
+		reqMsg.Text = "vmHc80eMwuODn03LVV2OkDktzVvS3nrWkSijv9Hr3xPoBi5i3h6F4dfMh4C			dp7WarSPuihtAVhhlUQEf77Ury6YwfnchC4Kki1M4"
+		//fmt.Printf("%s", reqMsg)
+
+		// ToDO: proper logging
+		// Marker James
+		fmt.Printf("%d,%dB,%d\n", before.UnixNano(), reqMsg.len(), i)
 		err := c.WriteMsg(reqMsg)
 		if err != nil {
 			log.Error("Unable to write", "err", err)
 			continue
 		}
+
+		before_conv := time.Unix(0, int64(before.UnixNano()))
+		elapsed := time.Unix(0, time.Now().UnixNano()).Sub(before_conv).Round(time.Microsecond)
+		fmt.Printf("Sending finished: %s\n", elapsed)
 	}
 	// After sending the last ping, set a ReadDeadline on the stream
 	err := c.qstream.SetReadDeadline(time.Now().Add(*timeout))
@@ -300,6 +332,7 @@ func (c client) send() {
 	}
 }
 
+// Will not be needed in the future
 func (c client) read() {
 	// Receive pong message (with final timeout)
 	for i := 0; i < *count || *count == 0; i++ {
@@ -352,7 +385,16 @@ func (s server) run() {
 	if err != nil {
 		LogFatal("Unable to initialize SCION network", "err", err)
 	}
+
+	// Better output
+// 	getLogWriter, err := utils.GetQLOGWriter()
+// 	if err != nil {
+// 		LogFatal("Unable to get QLOG Writer", "err", err)
+// 	}
+// 	quicConf := &quic.Config{GetLogWriter: getLogWriter}
 	qsock, err := squic.Listen(network, local.Host, addr.SvcNone, nil)
+
+	//qsock, err := squic.Listen(network, local.Host, addr.SvcNone, quicConf)
 	if err != nil {
 		LogFatal("Unable to listen", "err", err)
 	}
@@ -363,7 +405,7 @@ func (s server) run() {
 	}
 	log.Info("Listening", "local", qsock.Addr())
 	for {
-		qsess, err := qsock.Accept()
+		qsess, err := qsock.Accept(context.Background())
 		if err != nil {
 			log.Error("Unable to accept quic session", "err", err)
 			// Accept failing means the socket is unusable.
@@ -378,8 +420,8 @@ func (s server) run() {
 }
 
 func (s server) handleClient(qsess quic.Session) {
-	defer qsess.Close()
-	qstream, err := qsess.AcceptStream()
+	defer qsess.CloseWithError(errorNoError, "")
+	qstream, err := qsess.AcceptStream(context.Background())
 	if err != nil {
 		log.Error("Unable to accept quic stream", "err", err)
 		return
@@ -391,20 +433,29 @@ func (s server) handleClient(qsess quic.Session) {
 		// Receive ping message
 		msg, err := qs.ReadMsg()
 		if err != nil {
-			log.Error("Unable to read", "err", err)
+			if err == io.EOF || err.Error() == errorNoErrorString {
+				log.Info("Quic session ended", "src", qsess.RemoteAddr())
+			} else {
+				log.Error("Unable to read", "err", err)
+			}
 			break
 		}
+		fmt.Printf("Packet received, %d bytes\n", msg.len())
+
+		//fmt.Printf("Packet received: %s\n", msg)
 
 		// Send pong message
-		replyMsg := replyMsg(msg)
-		err = qs.WriteMsg(replyMsg)
-		if err != nil {
-			log.Error("Unable to write", "err", err)
-			break
-		}
+		// Disables since not needed
+// 		replyMsg := replyMsg(msg)
+// 		err = qs.WriteMsg(replyMsg)
+// 		if err != nil {
+// 			log.Error("Unable to write", "err", err)
+// 			break
+// 		}
 	}
 }
 
+// TODO: Path choice logic
 func choosePath(interactive bool) snet.Path {
 	var pathIndex uint64
 
