@@ -93,6 +93,13 @@ def processTsharkdata(filename, timestep=1):
     sent = df.set_index('timestamp').resample(str(1000 * timestep) + 'ms', label='right').sum()
     return sent
 
+def limit_flow(rate_string):
+    command = ('sudo tcset lo --rate %s --overwrite' % (rate_string))
+    os.system(command)
+    print(datetime.fromtimestamp(time.time()), " changed to ", rate_string)
+
+
+
 def runExperiment(datafile):
 
     print("As of now: This experiment is super specific for my configurations, so it won't work out of the box.")
@@ -104,26 +111,23 @@ def runExperiment(datafile):
     servercommand = (programbase + 'pingpong -mode server '
                        '-local 1-ff00:0:110,[127.0.0.1]:40002 -sciond 127.0.0.11:30255').split()
     clientcommand = (programbase + 'pingpong -mode client -remote 1-ff00:0:110,[127.0.0.1]:40002 '
-                     '-local 1-ff00:0:111,[127.0.0.1]:0 -count 10000 -sciond 127.0.0.19:30255 -interval 3s -file /home/james/Downloads/load.pdf').split()
-    tsharkcommand = ('sudo runuser -l james -c').split() + ["tshark -t e -i lo -Y scion.udp.dstport==40002"]
+                     '-local 1-ff00:0:111,[127.0.0.1]:0 -count 10000 -sciond 127.0.0.19:30255 -interval 3s -file /home/james/TheSting.mp4').split()
     tsharkcommand = ('sudo runuser -l james -c').split() + ["tshark -t e -i lo -Y scion.udp.dstport==40002"]
 
     tcsetcommand14 = 'sudo tcset lo --rate 14mbps --overwrite'
     tcsetcommand28 = 'sudo tcset lo --rate 28mbps --overwrite'
     tcsetcommand7 = 'sudo tcset lo --rate 7mbps --overwrite'
     tcdelcommand = 'sudo tcdel lo --all'
-    os.system(tcsetcommand14)
+    limit_flow('14mbps')
     serv = subprocess.Popen(servercommand)
     shark = subprocess.Popen(tsharkcommand, stdout=f, stderr=f)
     time.sleep(2)
     client = subprocess.Popen(clientcommand)
-    time.sleep(40)
-    os.system(tcsetcommand28)
-    print(datetime.fromtimestamp(time.time()), " changed to 28")
-    time.sleep(40)
-    os.system(tcsetcommand7)
-    print(datetime.fromtimestamp(time.time()), " changed to 7")
-    time.sleep(40)
+    time.sleep(20)
+    limit_flow('28mbps')
+    time.sleep(20)
+    limit_flow('7mbps')
+    time.sleep(20)
     client.kill()
     time.sleep(2)
 
@@ -151,9 +155,8 @@ def plot_rate(filename, timestep=0.1):
 # Args are an alternative way of passing arguments. currently: 3 arguments: behaviorsummary, buffersize, tso_on
 def main():
     datafile = 'tshark_test.log'
-    #runExperiment(datafile)
-
-    timestep = 1
+    runExperiment(datafile)
+    timestep = 0.001
     filename = 'compressed_data'
     data = calculateLoadSCION(datafile=datafile, timestep=timestep)
     data.to_csv(filename)
