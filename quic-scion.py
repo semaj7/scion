@@ -69,20 +69,15 @@ def parseTsharkSCIONQuic(datafiles, filedestination):
         # Write compressed data to a csv file
         np.savetxt(filedestination, np.array(data), delimiter=",", fmt='%s')
 
-def calculateLoadSCION(datafile='tshark_test.log'):
+def calculateLoadSCION(datafile='tshark_test.log', timestep=1.0):
     datafiles = [datafile]
     condensed = 'tsharkdata.csv'
     #if not os.path.exists(condensed):
     parseTsharkSCIONQuic(datafiles, condensed)
-    timestep = 1
     data = processTsharkdata(condensed, timestep)
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-        print(data)
-    plt.figure('scion')
-    plt.plot(data.index, data['bitload']/timestep, label='bitload')
-    plt.savefig('blub')
-    data.to_csv('data_blub')
-
+    # with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
+    #     print(data)
+    return data
 
 # Columns: timestamp, measuredon, src, dest, load, payload, udpno, seqno, ackno
 def processTsharkdata(filename, timestep=1):
@@ -98,10 +93,11 @@ def processTsharkdata(filename, timestep=1):
     sent = df.set_index('timestamp').resample(str(1000 * timestep) + 'ms', label='right').sum()
     return sent
 
-def runExperiment():
+def runExperiment(datafile):
+
+    print("As of now: This experiment is super specific for my configurations, so it won't work out of the box.")
 
     os.system('sudo pkill runuser')
-    datafile = 'tshark_test.log'
     f = open(datafile, 'w')
     scionfolder = '/home/james/thesis/scionfork/scion/'
     programbase = scionfolder + 'go/examples/pingpong/'
@@ -141,20 +137,28 @@ def runExperiment():
 
     f.close()
     print("Finished processes.")
-    calculateLoadSCION(datafile=datafile)
 
-def plot_rate():
-    timestep = 0.1
-    f = open('data_blub', 'r')
+
+def plot_rate(filename, timestep=0.1):
+    f = open(filename, 'r')
     data = pd.read_csv(f)
+    #data = data.set_index('timestamp')
     plt.figure('scion')
     plt.plot(data.index, data['bitload'] / timestep, label='bitload')
     #plt.hlines([14000000, 7000000, 28000000], xmin=0, xmax)
-    plt.savefig('blub')
+    plt.savefig('plot')
 
 # Args are an alternative way of passing arguments. currently: 3 arguments: behaviorsummary, buffersize, tso_on
 def main():
-    runExperiment()
+    datafile = 'tshark_test.log'
+    #runExperiment(datafile)
+
+    timestep = 1
+    filename = 'compressed_data'
+    data = calculateLoadSCION(datafile=datafile, timestep=timestep)
+    data.to_csv(filename)
+    plot_rate(filename, timestep)
+
     print("Experiment finished.")
     # print("Resultfolder: ", config['result_dir'])
     # return config['result_dir']
