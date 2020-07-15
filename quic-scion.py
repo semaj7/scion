@@ -93,16 +93,52 @@ def processTsharkdata(filename, timestep=1):
     sent = df.set_index('timestamp').resample(str(1000 * timestep) + 'ms', label='right').sum()
     return sent
 
-def limit_flow(rate_string):
-    command = ('sudo tcset lo --rate %s --overwrite' % (rate_string))
+def limit_flow(rate_string, init=False):
+    if init:
+       # command = ('sudo tcset lo --rate %s --tc-command > temp.sh' % (rate_string))
+
+        command = ('sudo tcset lo --rate %s' % (rate_string))
+    else:
+        command = ('sudo tcset lo --rate %s --change' % (rate_string))
+
+       # command = ('sudo tcset lo --rate %s --change --tc-command > temp.sh' % (rate_string))
+
+    #command = ('sudo tcset lo --rate %s --overwrite --tc-command > temp.sh' % (rate_string))
+
+    #command = ("tc qdisc add dev lo root tbf rate %s peakrate %s" % (rate_string, rate_string))
     os.system(command)
+
+    # f = open('temp.sh', 'r')
+    # lines = f.read().split("\n")
+    # for l in lines:
+    #     if 'burst' in l:
+    #         command = re.sub(r'burst\s+\S+\s+cburst.+', 'burst 1.0KB cburst 1.0KB', l)
+    #         #command = re.sub(r'ceil\s+\S+\s+burst\s+\S+\s+cburst.+', 'ceil 2.0Kbit burst 2KB cburst 2KB', l)
+    #     else:
+    #         command = l
+    #     print(command)
+    #     os.system(command)
+
+    #os.system('sh temp.sh')
+
+    # os.system('sudo /sbin/tc qdisc del dev lo root')
+    # os.system('sudo /sbin/tc qdisc del dev lo igress')
+    # os.system('sudo /bin/ip link set dev ifb6094 down')
+    # os.system('sudo /bin/ip link delete ifb6094 type ifb')
+    # os.system('sudo /sbin/tc qdisc add dev lo root handle 17ce: htb default 1')
+    # os.system('sudo /sbin/tc class add dev lo parent 17ce: classid 17ce:1 htb rate 32000000.0kbit')
+    # os.system('sudo /sbin/tc class add dev lo parent 17ce: classid 17ce:117 htb rate %s ceil %s burst 0.0KB cburst 1250.0KB' % (rate_string, rate_string))
+    # os.system('sudo /sbin/tc qdisc add dev lo parent 17ce:117 handle 2672: netem')
+    # os.system('sudo /sbin/tc filter add dev lo protocol ip parent 17ce: prio 5 u32 match ip dsp 0.0.0.0/0 match ip src')
+
+
     print(datetime.fromtimestamp(time.time()), " changed to ", rate_string)
 
 
 
 def runExperiment(datafile):
 
-    print("As of now: This experiment is super specific for my configurations, so it won't work out of the box.")
+    print("As of now: This experiment is super specific to my configurations, so it won't work out of the box.")
 
     os.system('sudo pkill runuser')
     f = open(datafile, 'w')
@@ -118,16 +154,18 @@ def runExperiment(datafile):
     tcsetcommand28 = 'sudo tcset lo --rate 28mbps --overwrite'
     tcsetcommand7 = 'sudo tcset lo --rate 7mbps --overwrite'
     tcdelcommand = 'sudo tcdel lo --all'
-    limit_flow('14mbps')
+    os.system('sudo tcdel lo --all')
     serv = subprocess.Popen(servercommand)
     shark = subprocess.Popen(tsharkcommand, stdout=f, stderr=f)
-    time.sleep(2)
+    limit_flow('14mbps', init=True)
+    #time.sleep(2)
     client = subprocess.Popen(clientcommand)
-    time.sleep(20)
-    limit_flow('28mbps')
-    time.sleep(20)
-    limit_flow('7mbps')
-    time.sleep(20)
+    n = 100
+    start = time.time()
+    for i in range(n):
+        limit_flow('28mbps')
+        limit_flow('7mbps')
+    end = time.time()
     client.kill()
     time.sleep(2)
 
@@ -142,8 +180,12 @@ def runExperiment(datafile):
     f.close()
     print("Finished processes.")
 
+    print("Start: ", start, "end: ", end)
+    dt = end - start
+    print("Total time: ", dt)
+    print("Average time per limit change: ", dt / (2 * n))
 
-def plot_rate(filename, timestep=0.1):
+def plot_rate(filename, timestep=0.001):
     f = open(filename, 'r')
     data = pd.read_csv(f)
     #data = data.set_index('timestamp')
@@ -156,7 +198,7 @@ def plot_rate(filename, timestep=0.1):
 def main():
     datafile = 'tshark_test.log'
     runExperiment(datafile)
-    timestep = 0.001
+    timestep = 0.01
     filename = 'compressed_data'
     data = calculateLoadSCION(datafile=datafile, timestep=timestep)
     data.to_csv(filename)
