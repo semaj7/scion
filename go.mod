@@ -9,6 +9,8 @@ require (
 	github.com/cloudflare/sidh v0.0.0-20181111220428-fc8e6378752b // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/dchest/cmac v0.0.0-20150527144652-62ff55a1048c
+	github.com/godbus/dbus v4.1.0+incompatible // indirect
+	github.com/godbus/dbus/v5 v5.0.3
 	github.com/golang/mock v1.2.1-0.20190329180013-73dc87cad333
 	github.com/google/go-cmp v0.3.0
 	github.com/google/go-querystring v1.0.1-0.20190318165438-c8c88dbee036 // indirect
