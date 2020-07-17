@@ -38,6 +38,7 @@ func main() {
 }
 
 func connect_to_athena_and_listen_for_applyControl() {
+	// analogue to: dbusctl --user
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
@@ -45,6 +46,7 @@ func connect_to_athena_and_listen_for_applyControl() {
 	}
 	defer conn.Close()
 
+	// register/bind a service name for the dbus service
 	reply, err := conn.RequestName(SERVICE_NAME,
 		dbus.NameFlagDoNotQueue)
 	if err != nil {
@@ -56,8 +58,13 @@ func connect_to_athena_and_listen_for_applyControl() {
 	}
 
 	f := foo("Bar!")
+
+	// make the function available (will be available as dbus method)
+	// could also do it for signals (events) or properties
 	conn.Export(f, OBJECT_PATH, INTERFACE_NAME)
 
+
+	// Make it instrospectable
 	n := &introspect.Node{
 		Name: OBJECT_PATH,
 		Interfaces: []introspect.Interface{
