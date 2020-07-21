@@ -27,7 +27,15 @@ func (fshaperDbus *fshaperDbusMethodInterface) ApplyControl(dType uint32, flow u
 		interfaceName := getQuicInterfaceName(int32(i))
 		obj := fshaperDbus.dbusBase.Conn.Object(serviceName, objectPath)
 		fshaperDbus.dbusBase.Log("calling ApplyControl on %s in %s", serviceName, objectPath)
-		call := obj.Call(interfaceName+".ApplyControl", 0, dType, f)
+
+		var beta float64
+		var cwnd_adjust, cwnd_max_adjust int16
+		var use_conservative_allocation bool
+		beta = float64(int((f >> 48) & 0xffff))/1024
+		cwnd_adjust = int16((f >> 32) & 0xffff)
+		cwnd_max_adjust = int16((f >> 16) & 0xffff)
+		use_conservative_allocation = bool((f & 0x1) == 1)
+		call := obj.Call(interfaceName+".ApplyControl", 0, dType, beta, cwnd_adjust, cwnd_max_adjust, use_conservative_allocation)
 		if call.Err != nil {
 			panic(call.Err)
 		}

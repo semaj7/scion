@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"time"
+	"net"
 	
 	"github.com/scionproto/scion/go/flowtele/dbus"
 )
@@ -15,23 +16,32 @@ func main() {
 	defer fdbus.Close()
 
 	// start QUIC instances
-	var i int32
-	for i = 0; i < 3; i++ {
-		go func(flowId int32) {
+	nUsers := 11
+	// TODO(cyrill) read flow specs from config/user_X.json
+	remoteIp := net.ParseIP("127.0.0.1")
+	remoteAddresses := []net.UDPAddr{}
+	startPort := 5500
+	for ui := 0; ui < nUsers; ui++ {
+		remoteAddresses = append(remoteAddresses, net.UDPAddr{IP: remoteIp, Port: startPort+ui})
+	}
+
+	for di, addr := range remoteAddresses {
+		go func(remoteAddress net.UDPAddr, flowId int32) {
 			qdbus := flowteledbus.NewQuicDbus(flowId)
 			qdbus.OpenSessionBus()
 			defer qdbus.Close()
 			qdbus.Register()
-			fmt.Println("Sending rtt signal every 2 seconds ...")
+			secs := uint(1)
+			fmt.Printf("Sending rtt signal every %d seconds ...\n", secs)
 			counter := uint32(0)
 			for {
 				select {
-				case <-time.After(2*time.Second):
+				case <-time.After(time.Second):
 					qdbus.SendCwndSignal(time.Now(), counter, 42)
 					counter += 1
 				}
 			}
-		}(i)
+		}(addr, int32(di))
 	}
 
 	// register method and listeners

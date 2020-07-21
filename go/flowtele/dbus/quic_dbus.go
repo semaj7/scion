@@ -19,11 +19,11 @@ type quicDbusMethodInterface struct {
 	quicDbus *QuicDbus
 }
 
-func (qdbmi *quicDbusMethodInterface) ApplyControl(dType uint32, cwnd uint64) (ret bool, dbusError *dbus.Error) {
+func (qdbmi *quicDbusMethodInterface) ApplyControl(dType uint32, beta float64, cwnd_adjust int16, cwnd_max_adjust int16, use_conservative_allocation bool) (ret bool, dbusError *dbus.Error) {
 	// apply CC params to QUIC connections
 	// quicDbusMethodInterface.dbusBase.Send(...)
 	qdb := qdbmi.quicDbus
-	qdb.Log("received ApplyControl(%d, %d)", dType, cwnd)
+	qdb.Log("received ApplyControl(%d, %f, %d, %d, %d)", dType, beta, cwnd_adjust, cwnd_max_adjust, use_conservative_allocation)
 	// fmt.Printf("dType = %d, flow %d received cwnd %d\n", dType, qdb.FlowId, cwnd)
 	// if dbusError != nil {
 	// 	fmt.Println(dbusError)
