@@ -20,6 +20,7 @@ var (
 func main() {
 	flag.Parse()
 	// first run
+	// python3.6 athena_m10.py 12
 	// clear; go run go/flowtele/quic_listener.go --num 2
 	// clear; go run go/flowtele/socket.go --num 2
 	
