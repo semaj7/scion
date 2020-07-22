@@ -72,7 +72,7 @@ func (s *dbusSignalStruct) IntrospectSignal() introspect.Signal {
 	return introspect.Signal{Name: s.Name(), Args: arg_list}
 }
 
-func createQuicDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32) DbusSignal{
+func createReportDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32) DbusSignal{
 	return &dbusSignalStruct{t, struct{
 		Flow int32
 		TvSec uint64
@@ -86,7 +86,7 @@ func createQuicDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Time
 	}}
 }
 
-func createQuicDbusSignalUint32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 uint32) DbusSignal{
+func createReportDbusSignalUint32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 uint32) DbusSignal{
 	return &dbusSignalStruct{t, struct{
 		Flow int32
 		TvSec uint64
@@ -102,7 +102,7 @@ func createQuicDbusSignalUint32Uint32(t QuicDbusSignalType, flow int32, time tim
 	}}
 }
 
-func createQuicDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32) DbusSignal{
+func createReportDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32) DbusSignal{
 	return &dbusSignalStruct{t, struct{
 		Flow int32
 		TvSec uint64
@@ -118,7 +118,7 @@ func createQuicDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time time
 	}}
 }
 
-func createQuicDbusSignalUint32Int32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32, v2 uint32) DbusSignal{
+func createReportDbusSignalUint32Int32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32, v2 uint32) DbusSignal{
 	return &dbusSignalStruct{t, struct{
 		Flow int32
 		TvSec uint64

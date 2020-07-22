@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/godbus/dbus"
-	"github.com/godbus/dbus/introspect"
 )
 
 const (
@@ -16,7 +15,7 @@ type fshaperDbusMethodInterface struct {
 	dbusBase *DbusBase
 }
 
-func (fshaperDbus *fshaperDbusMethodInterface) ApplyControl(dType uint32, flow uint32, flow0 uint64, flow1 uint64, flow2 uint64, flow3 uint64, flow4 uint64, flow5 uint64, flow6 uint64, flow7 uint64, flow8 uint64, flow9 uint64, flow10 uint64) (ret bool, dbusError *dbus.Error) {
+func (fshaperDbus fshaperDbusMethodInterface) ApplyControl(dType uint32, flow uint32, flow0 uint64, flow1 uint64, flow2 uint64, flow3 uint64, flow4 uint64, flow5 uint64, flow6 uint64, flow7 uint64, flow8 uint64, flow9 uint64, flow10 uint64) (ret bool, dbusError *dbus.Error) {
 	// apply CC params to QUIC connections
 	// fshaperDbusMethodInterface.dbusBase.Send(...)
 	flows := []uint64{flow0, flow1, flow2, flow3, flow4, flow5, flow6, flow7, flow8, flow9, flow10}
@@ -42,7 +41,7 @@ func (fshaperDbus *fshaperDbusMethodInterface) ApplyControl(dType uint32, flow u
 		var res bool
 		call.Store(&res)
 		if res {
-			fshaperDbus.dbusBase.Log("successfully updated flow")
+			fshaperDbus.dbusBase.Log("successfully updated flow %d", i)
 		} else {
 			fshaperDbus.dbusBase.Log("failed to update flow")
 			return false, nil
@@ -70,6 +69,6 @@ func NewFshaperDbus() *DbusBase {
 	}
 	namespace := dbus.ObjectPath(nsString)
 	d.SignalMatchOptions = []dbus.MatchOption{dbus.WithMatchPathNamespace(namespace)}
-	d.ExportedSignals = []introspect.Signal{}
+	d.ExportedSignals = allFshaperDbusSignals()
 	return &d
 }
