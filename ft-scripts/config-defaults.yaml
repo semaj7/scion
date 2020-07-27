@@ -2,12 +2,15 @@
 # It is designed for the 'BottleneckTopology'.
 
 name: default_experiment
-# Sending Behavior:
-#-------------------------------
-# Either use command or detailled.
-# If command is nonempty, detailled will be ignored
-#-------------------------------
-behavior_command:
+
+valloc_python_command: "pyhton2"
+valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
+
+athena_python_command: "pyhton2"
+atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m10.py'
+
+ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
+
 this_hostname:
 hosts:
     h1:
