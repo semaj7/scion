@@ -123,7 +123,7 @@ func startQuicSender(remoteAddress net.UDPAddr, flowId int32) error {
 		fmt.Printf("Error starting QUIC connection to [%s]: %s\n", remoteAddress.String(), err)
 		return err
 	}
-	rateInBitsPerSecond := uint64(10000)
+	rateInBitsPerSecond := uint64(3000000)
 	qdbus.Log("set fixed rate %f...", float64(rateInBitsPerSecond)/1000000)
 	session.SetFixedRate(rateInBitsPerSecond)
 	qdbus.Log("session established. Opening stream...")
@@ -133,13 +133,22 @@ func startQuicSender(remoteAddress net.UDPAddr, flowId int32) error {
 		return err
 	}
 	qdbus.Log("stream opened %d", stream.StreamID())
-	message := make([]byte, 100000000)
+	message := make([]byte, 1000000)
 	for i := range message {
 		message[i] = 42
 	}
 	for {
-		fmt.Printf("Sending message of length %d\n", len(message))
-		_, err = stream.Write([]byte(message))
+		// fmt.Printf("Sending message of length %d\n", len(message))
+		// finished := make(chan error)
+		// go func(m []byte) {
+		// 	_, err = stream.Write(m)
+		// 	finished <- err
+		// }(message)
+		// select {
+		// case err := <-finished:
+		// 	fmt.Printf("Finished writing (%s)\n", err)
+		// }
+		_, err = stream.Write(message)
 		if err != nil {
 			fmt.Printf("Error writing message to [%s]: %s\n", remoteAddress.String(), err)
 			return err

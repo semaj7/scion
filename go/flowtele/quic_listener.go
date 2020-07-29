@@ -78,7 +78,7 @@ func startListener(addr *net.UDPAddr) error {
 		// MBit/s
 		curRate := float64(n)/tCur/1000000.0*8.0
 		totRate := float64(nTot)/tTot/1000000.0*8.0
-		fmt.Printf("cur: %.1fMBit/s [%.2fs], tot: %.1fMBit/s [%.2fs]\n", curRate, tCur, totRate, tTot)
+		fmt.Printf("%d cur: %.1fMBit/s [%.2fs], tot: %.1fMBit/s [%.2fs]\n", addr.Port, curRate, tCur, totRate, tTot)
 	}
 	return nil
 }
