@@ -1,5 +1,7 @@
 module github.com/scionproto/scion
 
+replace github.com/lucas-clemente/quic-go => /home/cyrill/go/src/github.com/lucas-clemente/quic-go
+
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/antlr/antlr4 v0.0.0-20181218183524-be58ebffde8e

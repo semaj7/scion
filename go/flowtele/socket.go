@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"net"
 	"crypto/tls"
 	"flag"
+	"time"
 	
 	"github.com/scionproto/scion/go/flowtele/dbus"
 	"github.com/lucas-clemente/quic-go"
@@ -86,12 +88,44 @@ func startQuicSender(remoteAddress net.UDPAddr, flowId int32) error {
 		return err
 	}
 	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	quicConfig := &quic.Config{}
+
+	newSrttMeasurement := func(t time.Time, srtt time.Duration) {
+		qdbus.Log("New srtt measurement received (%v), %v", t, srtt)
+		if srtt > math.MaxUint32 {
+			panic("srtt does not fit in uint32")
+		}
+		qdbus.Send(flowteledbus.CreateQuicDbusSignalRtt(flowId, t, uint32(srtt.Microseconds())))
+	}
+	packetsLost := func(t time.Time, newSlowStartThreshold uint64) {
+		// qdbus.Log("packets lost (%v), new ssthresh=%d", t, newSlowStartThreshold)
+		if newSlowStartThreshold > math.MaxUint32 {
+			panic("newSlotStartThreshold does not fit in uint32")
+		}
+		qdbus.Send(flowteledbus.CreateQuicDbusSignalLost(flowId, t, uint32(newSlowStartThreshold)))
+	}
+	packetsAcked := func(t time.Time, congestionWindow uint64, packetsInFlight uint64) {
+		qdbus.Log("packets acked (%v), cwnd=%d, inflight=%d", t, congestionWindow, packetsInFlight)
+		if congestionWindow > math.MaxUint32 {
+			panic("congestionWindow does not fit in uint32")
+		}
+		if packetsInFlight > math.MaxInt32 {
+			panic("packetsInFlight does not fit in int32")
+		}
+		qdbus.Send(flowteledbus.CreateQuicDbusSignalCwnd(flowId, t, uint32(congestionWindow), int32(packetsInFlight)))
+	}
+
+	// make QUIC idle timout long to allow a delay between starting the listeners and the senders
+	flowteleSignalInterface := quic.CreateFlowteleSignalInterface(newSrttMeasurement, packetsLost, packetsAcked)
+	quicConfig := &quic.Config{IdleTimeout: time.Hour,
+		FlowteleSignalInterface: flowteleSignalInterface}
 	session, err := quic.Dial(conn, &remoteAddress, "host:0", tlsConfig, quicConfig)
 	if err != nil {
 		fmt.Printf("Error starting QUIC connection to [%s]: %s\n", remoteAddress.String(), err)
 		return err
 	}
+	rateInBitsPerSecond := uint64(10000)
+	qdbus.Log("set fixed rate %f...", float64(rateInBitsPerSecond)/1000000)
+	session.SetFixedRate(rateInBitsPerSecond)
 	qdbus.Log("session established. Opening stream...")
 	stream, err := session.OpenStreamSync()
 	if err != nil {

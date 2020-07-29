@@ -72,7 +72,7 @@ func (db *DbusBase) registerSignalListeners() {
 }
 
 func (db *DbusBase) registerIntrospectMethod() {
-	fmt.Printf("Name: %s, methods: %+v\n", db.InterfaceName, introspect.Methods(db.ExportedMethods))
+	// fmt.Printf("Name: %s, methods: %+v\n", db.InterfaceName, introspect.Methods(db.ExportedMethods))
 	n := &introspect.Node{
 		Name: string(db.ObjectPath),
 		Interfaces: []introspect.Interface{
