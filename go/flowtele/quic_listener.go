@@ -38,7 +38,8 @@ func startListener(addr *net.UDPAddr) error {
 		fmt.Printf("Error starting UDP listener: %s\n", err)
 		return err
 	}
-	quicConfig := &quic.Config{}
+	// make QUIC idle timout long to allow a delay between starting the listeners and the senders
+	quicConfig := &quic.Config{IdleTimeout: time.Hour}
 	server, err := quic.Listen(conn, &tlsConfig, quicConfig)
 	if err != nil {
 		fmt.Printf("Error starting QUIC listener: %s\n", err)
@@ -77,7 +78,7 @@ func startListener(addr *net.UDPAddr) error {
 		// MBit/s
 		curRate := float64(n)/tCur/1000000.0*8.0
 		totRate := float64(nTot)/tTot/1000000.0*8.0
-		fmt.Printf("cur: %.1fMBit/s [%.2fs], tot: %.1fMBit/s [%.2fs]\n", curRate, tCur, totRate, tTot)
+		fmt.Printf("%d cur: %.1fMBit/s [%.2fs], tot: %.1fMBit/s [%.2fs]\n", addr.Port, curRate, tCur, totRate, tTot)
 	}
 	return nil
 }
