@@ -8,7 +8,7 @@ import signal
 import yaml
 import argparse
 import os
-
+import json
 
 # Script for starting the rtt collection
 # Run locally on a host representing an AS
@@ -41,12 +41,29 @@ def add_pid_tofile(proc):
     f.close()
 
 
+
+
 # Gather neighbors from gen file
 # Store one neighbors IP per line
 def find_neighbors():
     # Parse the gen files.
     # TODO
+    genfile = "/gen/ISD/AS/someBR/topology.json"
+    topofile = "example_br_topo.json"
+    with open(topofile) as f:
+        topo = json.load(f)
+
+
+
     neighbors = []
+    #print(topo)
+    for br_props in topo['BorderRouters']:
+        ifs_config = topo['BorderRouters'][br_props]["Interfaces"]
+        for ifs in ifs_config:
+            interface = ifs_config[ifs]
+            props = {'ISD_AS': interface['ISD_AS'], 'Public': interface['PublicOverlay']['Addr'],
+                     'Remote': interface['RemoteOverlay']['Addr']}
+    print(props)
     print("Parse genfiles to find neighbors...")
     f = open(NEIGHBORS_FILE, 'w')
     f.write("blub. todo")
