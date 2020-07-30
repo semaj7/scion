@@ -40,36 +40,62 @@ def add_pid_tofile(proc):
     f.write(str(proc.pid) + "\n")
     f.close()
 
-
-
-
 # Gather neighbors from gen file
-# Store one neighbors IP per line
+# Store into NEIGHBORFILE. Structure:       neighborAS,PublicOverlayIP,RemoteOverlayIP
+# TODO: since we are not 100% sure what the genfile in SCIONLab will look like, this might fail.
+# TODO:         if there are AS folders that do not belong to the AS, we need another configuration parameter
+#               that is checked against the folders we find in gen/
 def find_neighbors():
     # Parse the gen files.
-    # TODO
-    genfile = "/gen/ISD/AS/someBR/topology.json"
-    topofile = "example_br_topo.json"
+    genfile = "gen/"
+    topofiles = []
+    for dirName, _, fileList in os.walk(genfile):
+        for f in fileList:
+            if f == "topology.json":
+                filepath = dirName+"/"+f
+                if re.fullmatch(r'gen/ISD\d+/AS.+/br\d+-.+/topology.json', filepath):
+                    print(filepath)
+                    topofiles.append(filepath)
+
+    # Checks #
+    ases = set()
+    isds = set()
+    brs = set()
+    for p in topofiles:
+        _, isd, asid, br, _ = p.split("/")
+        ases.add(asid)
+        isds.add(isd)
+        brs.add(br)
+    if len(ases) != 1:
+        print("WARNING: The number of AS folders is unexpected: ", ases)
+    if len(isds) != 1:
+        print("WARNING: The number of ISD folders is unexpected: ", isds)
+    num_brs = len(brs)
+
+    # Since the topofiles in the different br folders are redundant (at least as far as we experienced), it is
+        # enough to just take one topofile.
+    topofile = topofiles[0]
+
+    # traverse the json config file
+    neighbors = []
     with open(topofile) as f:
         topo = json.load(f)
 
+    if num_brs != len(topo['BorderRouters']):
+        print("WARNING: the number of border router folders is not identical to the number of border router entries"
+              " in the topology.json file: in json: ", len(topo['BorderRouters']), " folders: ", brs)
 
-
-    neighbors = []
-    #print(topo)
     for br_props in topo['BorderRouters']:
         ifs_config = topo['BorderRouters'][br_props]["Interfaces"]
         for ifs in ifs_config:
             interface = ifs_config[ifs]
             props = {'ISD_AS': interface['ISD_AS'], 'Public': interface['PublicOverlay']['Addr'],
                      'Remote': interface['RemoteOverlay']['Addr']}
-    print(props)
+            neighbors.append(props)
     print("Parse genfiles to find neighbors...")
     f = open(NEIGHBORS_FILE, 'w')
-    f.write("blub. todo")
-    print(neighbors)
     for neigh in neighbors:
-        f.write(neigh + "\n")
+        f.write(",".join(list(neigh.values())) + "\n")
     f.close()
     return
 
@@ -84,20 +110,26 @@ def start_server():
 
 # Start a process that collets srtt with iperf
 # Returns the process
+# TODO: testing and debugging
 def start_srtt_collector(dumpfile):
     cmd = "sudo perf record -e tcp:tcp_probe --filter 'dport == 5002' -o " +  dumpfile
     proc = subprocess.Popen(cmd.split(" "))
     add_pid_tofile(proc)
     return
 
+# Starts the clients with a fixed experiment length.
+# TODO: parametrize the experiment length. Use a config file, preferably the same as with the rest of experiments
 def start_clients(neighbors):
     client_procs = []
     client_files = []
     i = 0
-    for neigh_ip in neighbors:
+    for neigh_line in neighbors:
         i += 1
-        if neigh_ip == "":
+        if neigh_line == "":
             continue
+
+        asname, publicip, remoteip = neigh_line.split(",")
+        neigh_ip = publicip # TODO: see if this is true
 
         # Use this one with the port specification for local testing (when IP is the same)
         #cmd = "/usr/bin/iperf -c " + neigh_ip + " -p " + str(5000 + i) +  " -b 1Mbits -i 1 -t 0 -e"
@@ -112,6 +144,7 @@ def start_clients(neighbors):
     return client_procs, client_files
 
 def sensorstart():
+    # TODO no testing done yet.
     print("Starting perc to colelct srtt...")
     collector_proc = start_srtt_collector(DUMP_FILE)
     return collector_proc
@@ -161,6 +194,7 @@ def kill():
 
 
 def parse(neighbors, dumploc, datadestination):
+    # TODO
     # Parse the dump, create datasets for each destination
     cmd = "sudo perf report --stdio"
 
