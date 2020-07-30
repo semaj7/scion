@@ -26,6 +26,7 @@ DUMP_FILE='tcp_probe_dump.txt'
 IPERF_LOG ="iperf_output.log"
 
 # Commands for CLI
+RUN_ALL_COMMAND = "runall"
 NEIGHBORS_COMMAND = "findtopo"
 SENSOR_COMMAND = 'startsensor'
 SERVER_COMMAND= 'startserver'
@@ -35,18 +36,23 @@ CLEAN_COMMAND='clean'
 PARSE_COMMAND='parse'
 
 def add_pid_tofile(proc):
-    f = open(PROCESSES_FILE + "\n", 'w+')
-    f.write(str(proc.pid))
+    f = open(PROCESSES_FILE, 'w+')
+    f.write(str(proc.pid) + "\n")
     f.close()
 
 
 # Gather neighbors from gen file
+# Store one neighbors IP per line
 def find_neighbors():
     # Parse the gen files.
     # TODO
+    neighbors = []
     print("Parse genfiles to find neighbors...")
     f = open(NEIGHBORS_FILE, 'w')
     f.write("blub. todo")
+    print(neighbors)
+    for neigh in neighbors:
+        f.write(neigh + "\n")
     f.close()
     return
 
@@ -54,7 +60,7 @@ def find_neighbors():
 def start_server():
     print("Starting Server...")
     cmd = "iperf -s -e -i 1"
-    proc = subprocess.Popen(cmd)
+    proc = subprocess.Popen(cmd, preexec_fn=os.setsid)
     add_pid_tofile(proc)
     return
 
@@ -69,13 +75,24 @@ def start_srtt_collector(dumpfile):
 
 def start_clients(neighbors):
     client_procs = []
+    client_files = []
+    i = 0
     for neigh_ip in neighbors:
-        cmd = "iperf -c " + neigh_ip + " -b 1Mbits -i 1 -t 0 -e"
-        proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        add_pid_tofile(proc)
-        client_procs.append(client_procs)
-    return client_procs
+        i += 1
+        if neigh_ip == "":
+            continue
 
+        # Use this one with the port specification for local testing (when IP is the same)
+        #cmd = "/usr/bin/iperf -c " + neigh_ip + " -p " + str(5000 + i) +  " -b 1Mbits -i 1 -t 0 -e"
+
+        cmd = "/usr/bin/iperf -c " + neigh_ip +  " -b 1Mbits -i 1 -t 0 -e"
+
+        f = open("iperf_client" + str(i) + ".log", 'w')
+        print("Execute: ", cmd.split())
+        proc = subprocess.Popen(cmd.split(), stdout=f, preexec_fn=os.setsid)
+        add_pid_tofile(proc)
+        client_procs.append(proc)
+    return client_procs, client_files
 
 def sensorstart():
     print("Starting perc to colelct srtt...")
@@ -88,23 +105,24 @@ def run_experiment(runtime=10):
         print("Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
     print("Starting clients..")
     f = open(NEIGHBORS_FILE)
-    neighbors = list(f.readlines())
+    neighbors = list(f.read().split("\n"))
     f.close()
-    client_procs = start_clients(neighbors)
+    print("Neighbors: ", neighbors)
+    client_procs, client_files = start_clients(neighbors)
     time.sleep(runtime)
-    stop_clients(client_procs)
+    stop_clients(client_procs, client_files)
 
-def stop_clients(client_procs):
+def stop_clients(client_procs, client_files):
     # Iperf clients
     print("Stopping Client Processes...")
-    f = open(IPERF_LOG)
     for cp in client_procs:
-        cp.send_signal(signal.SIGINT)  # send Ctrl-C signal
-        stdout, stderr = cp.communicate()
-        f.write("Iperf Client: \n")
-        f.write(stdout)
-        f.write("Errors: \n" + stderr)
-    f.close() # TODO: verify that the SIGINT really triggers the program to stop. Last line should be summary print
+        os.killpg(os.getpgid(cp.pid), signal.SIGTERM)
+
+    for f in client_files:
+        f.close()
+
+    # f = open(IPERF_LOG, 'w')
+    # f.close() # TODO: verify that the SIGINT really triggers the program to stop. Last line should be summary print
 
     # # Server
     # f = open(IPERF_LOG)
@@ -123,6 +141,8 @@ def kill():
     for pid in pids:
         os.system('kill ', pid)
 
+
+
 def parse(neighbors, dumploc, datadestination):
     # Parse the dump, create datasets for each destination
     cmd = "sudo perf report --stdio"
@@ -136,7 +156,7 @@ def clean():
 def exec_from_args():
     global parser
     parser = argparse.ArgumentParser()
-    FUNCTION_MAP = {'run_all': run_all,
+    FUNCTION_MAP = {RUN_ALL_COMMAND: run_all,
                     NEIGHBORS_COMMAND: find_neighbors,
                     SENSOR_COMMAND: sensorstart,
                     SERVER_COMMAND: start_server,
