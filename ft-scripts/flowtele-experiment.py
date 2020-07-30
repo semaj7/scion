@@ -18,11 +18,14 @@ from datetime import datetime
 import yaml
 from collections import Counter
 import random
+import signal
 
 def initiateLog(hostID):
     hostlogfile = config['result_dir']+"hostlogs/%s.log" % hostID
+    print("Create log at ", hostlogfile)
+
     config['hostlog'] = hostlogfile
-    with hostlogfile as logfile:
+    with open(hostlogfile, 'w') as logfile:
         logfile.write(("%.6f" % time.time())+": "+config['this_hostname']+": Started\n")
 
 def log(logContent):
@@ -32,55 +35,79 @@ def log(logContent):
         logfile.write(("%.6f" % time.time())+": "+config['this_hostname']+": "+logContent+"\n")
 
 
-def startTshark(hostID):
+def startTshark():
     for i in range(1):
-        with open(config['result_dir']+'hostdata/'+str(hostID)+'-eth'+str(i)+'.log', 'w+') as f:
-            tcpDumpCommmand = ('tcpdump -tt -i '+str(hostID)+'-eth'+str(i)+' -n -e -v -S -x -s 96').split()
-            subprocess.Popen(tcpDumpCommmand, stdout=f, stderr=f)
-            log("Started tcpdump.")
+        with open(config['result_dir']+'hostdata/'+config['this_hostname']+"_dump.log", 'w+') as f:
+            tcpDumpCommmand = ('tshark -i '+ config['tshark_net_interface'] + " -Y 'scion.udp.dstport==40002'")
+            tcpDumpCommmand = ('tshark -i '+ config['tshark_net_interface'])
+            subprocess.Popen(tcpDumpCommmand.split(), stdout=f, stderr=f)
+            log("Started tshark.")
 
 
-def startFshaper(hostconfig, hostname):
+def startFshaperHost(hostconfig):
     hostname = config['this_hostname']
-    initiateLog(hostname)
-    startTshark(hostname)
+    startTshark()
     random.seed(hostname)
-    time.sleep(2)
-    fshaperoutput = config['result_dir'] + "fshaper.log"
-    config['fshaper_log'] = fshaperoutput
-    command = ""
-    fout = open(fshaperoutput, 'w')
+    time.sleep(1)
+    fshaperlog = config['result_dir'] + "/hostlogs/" + config['this_hostname'] + "_fshaper.log"
+    command = "/usr/local/go/bin/go run " + config['quic_sender_location']
+    log("Delaying for Listener to prepare...")
+    time.sleep(config['sender_delay_time'])
     log("Executing Command: " +  command)
-    iperf_Process = subprocess.Popen(command.split(" "), stdout=fout)
-    iperf_Process.communicate()
+
+    fout = open(fshaperlog, 'w')
+    fout.write("Quic Client Output: \n")
+    if config['print_to_console']:
+        proc = subprocess.Popen(command.split(), preexec_fn=os.setsid)
+    else:
+        proc = subprocess.Popen(command.split(), preexec_fn=os.setsid, stdout=fout, stderr=fout)
+
+    time.sleep(config['send_duration'])
+    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     fout.close()
 
 # Start iperf server with TCP on destination hosts
-def startQuicScionServer(config):
-    resfile = config['result_dir'] + config['iperf_outfile_server_tcp']
-    samplingperiod = config['iperf_sampling_period_server']
-    fout = open(resfile, "w")
-    tcpIperfCommand = ('iperf -s -p 5002 -e -i %d -t %d -f %s' % (samplingperiod, config['send_duration'] + 5, config['iperf_outfile_format'])).split()
-    print(tcpIperfCommand)
-    log("Starting TCP Server.")
-    log("Command: " + str(tcpIperfCommand))
-    proc = subprocess.Popen(tcpIperfCommand, stdout=fout)
+def startQuicScionServer(hostconfig):
+    resfile = config['result_dir'] + "/hostlogs/" + config['this_hostname'] + "_quic_receiver.log"
+    quicListenerCommand = "/usr/local/go/bin/go run " + config['quic_listener_location']
+   # quicListenerCommand = "memcached"
+
+    print("Executing: ", quicListenerCommand)
+    log("Starting Quic Listener...")
+    log("Executing Command: " + quicListenerCommand)
+    fout = open(resfile, 'w')
+    fout.write("Quic Client Output: \n")
+
+    if config['print_to_console']:
+        proc = subprocess.Popen(quicListenerCommand.split(), preexec_fn=os.setsid)
+    else:
+        proc = subprocess.Popen(quicListenerCommand.split(), preexec_fn=os.setsid, stdout=fout, stderr=fout)
+
+    time.sleep(config['receiver_duration'])
+    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    fout.close()
+
     return proc, fout
 
 def sender(hostconfig):
     hostname = config['this_hostname']
+    if hostconfig['role'] != 'sender':
+        print("Something went wrong. Host ", hostname, " is not defined as sender.")
     initiateLog(hostname)
-    startTshark(hostname)
-    random.seed(hostname)
+    startTshark()
     time.sleep(2)
-    startFshaper(hostconfig, hostname)
+    random.seed(hostname)
+    startFshaperHost(hostconfig)
     log("Fshaper Exited.")
 
 def receiver(hostconfig):
     hostname = config['this_hostname']
+    if hostconfig['role'] != 'receiver':
+        print("Something went wrong. Host ", hostname, " is not defined as receiver.")
     initiateLog(hostname)
-    startTshark(hostname)
-    startQuicScionServer(hostconfig, hostname)
+    startTshark()
+    time.sleep(2)
+    startQuicScionServer(hostconfig)
     log("Receiver Exited.")
 
 def run_ft_experiments(config):
@@ -103,30 +130,29 @@ def run_ft_experiments(config):
 def generateResultDir(behavior_summary, config, name):
 
     resultDir = 'results/'
-    resultDir += datetime.strftime(datetime.now(), "%Y-%m-%d--%H-%M-%S")
-    resultDir += + "-" + config['name'] + '/'
+    #resultDir += datetime.strftime(datetime.now(), "%Y-%m-%d--%H-%M-%S") + "-"
+    resultDir += config['name'] + '/'
     os.system('mkdir -p ' + resultDir)
     for rT in ['hostlogs/', 'hostdata/', 'condensed/']:
-        os.mkdir(resultDir+rT)
-    config['result_dir'] = resultDir
+        os.system('mkdir -p ' + resultDir+rT)
     return resultDir
 
 def runExperiment(config):
 
     run_ft_experiments(config)
-
+    print("Experiment done.")
     resultFilePrefix = config['result_dir']
-    print("Initiating logparser: " + resultFilePrefix)
-    subprocess.call(('./logparser.py '+resultFilePrefix+' SAVEPLOT').split())
-    subprocess.call(('cp /var/log/kern.log '+resultFilePrefix+'/tcpInternals.log').split())
-    subprocess.call(('chmod 644 '+resultFilePrefix+'/tcpInternals.log').split())
+    # print("Initiating logparser: " + resultFilePrefix)
+    # subprocess.call(('./logparser.py '+resultFilePrefix+' SAVEPLOT').split())
+    # subprocess.call(('cp /var/log/kern.log '+resultFilePrefix+'/tcpInternals.log').split())
+    # subprocess.call(('chmod 644 '+resultFilePrefix+'/tcpInternals.log').split())
 
 # If an explicit config is passed, will ignore any CLI arguments
 def setup_configuration(explicit_config=None):
     global config
     if explicit_config is None:
         # Load Default Config
-        with open("config-defaults.yaml", "r") as ymlfile:
+        with open("ft-scripts/config-defaults.yaml", "r") as ymlfile:
             config = yaml.load(ymlfile)
             # Load Arguments
             #setLogLevel(config['scion_log_level'])
@@ -140,12 +166,14 @@ def setup_configuration(explicit_config=None):
 
     args = sys.argv
     if len(args) > 1:
-        name = args[1]
-        config['name'] = name
+        config['this_hostname'] = args[1]
     if len(args) > 2:
-        config['this_hostname'] = args[2]
+        experimentname = args[2]
+        config['name'] = experimentname
+
     # Create Result Directory
-    resultFilePrefix = generateResultDir("emptyfornow", config, name)  # save it as: 'result_dir' config
+    resultFilePrefix = generateResultDir("emptyfornow", config, experimentname)  # save it as: 'result_dir' config
+    config['result_dir'] = resultFilePrefix
 
     # Dump Config
     f = open(resultFilePrefix + 'config.yaml', 'w')

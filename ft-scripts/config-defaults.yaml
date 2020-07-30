@@ -3,6 +3,8 @@
 
 name: default_experiment
 
+
+# Source locations
 valloc_python_command: "pyhton2"
 valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
 
@@ -11,7 +13,22 @@ atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m10.py'
 
 ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
 
-this_hostname:
+quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/quic_listener.go'
+quic_sender_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
+
+
+print_to_console: True
+
+# Resultfile Locations
+# Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect
+result_dir:
+tshark_dump:
+fshaper_log:
+
+
+tshark_net_interface: 'lo'
+
+this_hostname: default_host
 hosts:
     h1:
         role: receiver
@@ -31,7 +48,12 @@ memory_sampling_period: 0.1
 # Timestep size of tcpdump data. Only affects postprocessing
 plot_load_resolution: 0.1
 
-send_duration: 30 # In seconds
+# Timing
+sender_delay_time: 2
+send_duration: 10 # In seconds
+receiver_duration: 20
+
+# Postprocessing
 truncate_front: 2
 truncate_back: 2
 
@@ -88,10 +110,6 @@ behavior_summary_mapping:
     tcp-cubic: CUBIC
     tcp-bbr: BBR
     tcp-reno: RENO
-
-# These are not explicitly set, but follow from the other configurations. flowtele-experiment.py infers them.
-# Therefore: setting these and executing with flowtele-experiment.py will have no effect
-result_dir:
 
 stats_file: stats.json
 

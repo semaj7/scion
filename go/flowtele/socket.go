@@ -6,7 +6,7 @@ import (
 	"net"
 	"crypto/tls"
 	"flag"
-	
+
 	"github.com/scionproto/scion/go/flowtele/dbus"
 	"github.com/lucas-clemente/quic-go"
 )
@@ -22,8 +22,8 @@ func main() {
 	// first run
 	// python3.6 athena_m10.py 12
 	// clear; go run go/flowtele/quic_listener.go --num 2
-	// clear; go run go/flowtele/socket.go --num 2
-	
+		// clear; go run go/flowtele/socket.go --num 2
+
 	// var fdbus fshaperDbus
 	fdbus := flowteledbus.NewFshaperDbus()
 	// dbus setup
