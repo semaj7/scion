@@ -64,9 +64,9 @@ def find_neighbors():
         for f in fileList:
             if f == "topology.json":
                 filepath = dirName+"/"+f
-
+               
                 # Since our machine is an endhost, it's in an endhost folder. this may change from machine to machine.
-                if re.fullmatch(r'gen/ISD\d+/AS.+/endhost/topology.json', filepath):
+                if re.fullmatch(r'.+gen/ISD\d+/AS.+/endhost/topology.json', filepath):
                     print(filepath)
                     topofiles.append(filepath)
 
@@ -75,7 +75,10 @@ def find_neighbors():
     isds = set()
     brs = set()
     for p in topofiles:
-        _, isd, asid, br, _ = p.split("/")
+        spl =  p.split("/")
+        isd = spl[-3]
+        asid = spl[-2]
+        br = spl[-1]
         ases.add(asid)
         isds.add(isd)
         brs.add(br)
