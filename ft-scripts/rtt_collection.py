@@ -9,6 +9,7 @@ import yaml
 import argparse
 import os
 import json
+import numpy as np
 
 # Script for starting the rtt collection
 # Run locally on a host representing an AS
@@ -19,11 +20,20 @@ import json
 CLIENT_INIT_DELAY = 2
 
 
+
 # Since we want to command with a CLI, we store the intermediate values in files.
+IP_ADDR_FILE='local_ip.txt'
 NEIGHBORS_FILE='neighbors.txt'
 PROCESSES_FILE='processes.txt'
-DUMP_FILE='tcp_probe_dump.txt'
+PERF_RECORD_FILE= 'temp.perf.data'
+PERF_DUMP_FILE= 'perf.log'
+
+PARSED_DESTINATION = 'perf.csv'
+
 IPERF_LOG ="iperf_output.log"
+
+GENFOLDER = "/etc/gen/"
+GENFOLDER = "gen/"
 
 # Commands for CLI
 RUN_ALL_COMMAND = "runall"
@@ -33,10 +43,12 @@ SERVER_COMMAND= 'startserver'
 EXPERIMENT_COMMAND='run'
 KILL_COMMAND='killall'
 CLEAN_COMMAND='clean'
+PROCESS_COMMAND='preprocess'
 PARSE_COMMAND='parse'
 
 def add_pid_tofile(proc):
-    f = open(PROCESSES_FILE, 'w+')
+    f = open(PROCESSES_FILE, 'a+')
+    print("Adding ", str(proc.pid), " to the file.")
     f.write(str(proc.pid) + "\n")
     f.close()
 
@@ -47,9 +59,8 @@ def add_pid_tofile(proc):
 #               that is checked against the folders we find in gen/
 def find_neighbors():
     # Parse the gen files.
-    genfile = "gen/"
     topofiles = []
-    for dirName, _, fileList in os.walk(genfile):
+    for dirName, _, fileList in os.walk(GENFOLDER):
         for f in fileList:
             if f == "topology.json":
                 filepath = dirName+"/"+f
@@ -102,18 +113,23 @@ def find_neighbors():
 # Start servers
 def start_server():
     print("Starting Server...")
-    cmd = "iperf -s -e -i 1"
-    proc = subprocess.Popen(cmd, preexec_fn=os.setsid)
+    if not os.path.exists(IP_ADDR_FILE):
+        print("ERROR: LOCAL IP FILE ", IP_ADDR_FILE, 'is missing.')
+        return
+    f = open(IP_ADDR_FILE, 'r')
+    ip = list(f.readlines())
+    f.close()
+    cmd = "iperf -s -e -i 1 -B " + ip[0]
+    proc = subprocess.Popen(cmd, preexec_fn=os.setsid, shell=True)
     add_pid_tofile(proc)
     return
 
-
 # Start a process that collets srtt with iperf
 # Returns the process
-# TODO: testing and debugging
-def start_srtt_collector(dumpfile):
-    cmd = "sudo perf record -e tcp:tcp_probe --filter 'dport == 5002' -o " +  dumpfile
-    proc = subprocess.Popen(cmd.split(" "))
+# TODO: fix precision problem: timestamp resolution too big and also number of packets are too small
+def start_srtt_collector():
+    cmd = "sudo perf record -e tcp:tcp_probe -o " +  PERF_RECORD_FILE +  " -T --filter dport==5002"
+    proc = subprocess.Popen(cmd.split(" "), preexec_fn=os.setsid)
     add_pid_tofile(proc)
     return
 
@@ -144,9 +160,8 @@ def start_clients(neighbors):
     return client_procs, client_files
 
 def sensorstart():
-    # TODO no testing done yet.
     print("Starting perc to colelct srtt...")
-    collector_proc = start_srtt_collector(DUMP_FILE)
+    collector_proc = start_srtt_collector()
     return collector_proc
 
 
@@ -171,38 +186,87 @@ def stop_clients(client_procs, client_files):
     for f in client_files:
         f.close()
 
-    # f = open(IPERF_LOG, 'w')
-    # f.close() # TODO: verify that the SIGINT really triggers the program to stop. Last line should be summary print
-
-    # # Server
-    # f = open(IPERF_LOG)
-    # server_proc.send_signal(signal.SIGINT)  # send Ctrl-C signal
-    # stdout, stderr = server_proc.communicate()
-    # f.write("Iperf Server: \n")
-    # f.write(stdout)
-    # f.write("Errors: \n" + stderr)
-    # f.close()
-
-def kill():
+# TODO: This is probably not very safe yet, Anyone could change the pid file.
+def kill_all():
+    if (not os.path.exists(PROCESSES_FILE)):
+        print("No Process file stored. Nothing to kill.")
+        return
     print("Killing all Processes...")
-    f = open(PROCESSES_FILE)
+    f = open(PROCESSES_FILE, 'r')
     pids = list(f.readlines())
     f.close()
     for pid in pids:
-        os.system('kill ', pid)
+        print("Killing ", str(pid))
+        os.system('sudo kill ' + pid)
 
 
-
-def parse(neighbors, dumploc, datadestination):
-    # TODO
+# Preprocess results, from record format to report
+def preprocess():
     # Parse the dump, create datasets for each destination
-    cmd = "sudo perf report --stdio"
+    cmd = "sudo perf report --stdio -i " + PERF_RECORD_FILE + " -F time,sample,trace --header > " + PERF_DUMP_FILE
+    os.system(cmd)
+
+# Parse and merge perf dump
+# Store in csv file.
+# Fields: timestamp, sample, traces (explicitly)
+# Examples:
+#   26352.200000             3  src=127.0.0.17:5001 dest=127.0.0.1:52378 mark=0 data_len=32741 snd_nxt=0x854cd811
+#           snd_una=0x854cd811 snd_cwnd=10 ssthresh=2147483647 snd_wnd=65536 srtt=16 rcv_wnd=65483 sock_cookie=bf
+#   26352.200000             3  src=127.0.0.19:5001 dest=127.0.0.1:47808 mark=0 data_len=32741 snd_nxt=0x88f83940
+#           snd_una=0x88f83940 snd_cwnd=10 ssthresh=2147483647 snd_wnd=65536 srtt=12 rcv_wnd=65483 sock_cookie=c1
+def parse_results():
+    # timestamp, sample, traces
+    data = []
+    data.append(['timestamp', 'num_samples', 'source', 'dest', 'data_len', 'srtt'])
+
+    print("Parsing datafile " + PERF_DUMP_FILE + "...")
+
+    wcOutput = str(subprocess.check_output(("wc -l " + PERF_DUMP_FILE).split()))
+    filelength = int(re.match(r'b\'(\d+).+', wcOutput).group(1))
+    linecounter = 0
+
+    with open(PERF_DUMP_FILE, 'r') as df:
+        linestring = '_'
+        while (linestring):
+
+
+            # Show progress
+            if linecounter % 100000 == 0:
+                print("Read %d / %d lines." % (linecounter, filelength), end="\r")
+
+            # Perf header contains #
+            if linestring[0] == '#':
+                linestring = df.readline()
+                linecounter += 1
+                continue
+
+            matchstring = r'(\s*\d+\.\d+)\s+(\d+)\s+src=(\S+)\s+dest=(\S+).+data_len=(\d+).+srtt=(\d+).+'
+            matchstring = r'.*\d+.*'
+            r'gen/ISD\d+/AS.+/br\d+-.+/topology.json'
+            match = re.match(r'.*(\d+\.\d+)\s+(\d+)\s+src=(\S+)\s+dest=(\S+).*data_len=(\d+).*srtt=(\d+).*', linestring)
+            #match = re.match(r'.*(\d+\.\d+).*', linestring)
+
+            if match:
+                print(match.groups())
+                timestamp, num_samples, source, dest, data_len, srtt = match.groups()
+                line = [timestamp, num_samples, source, dest, data_len, srtt]
+                data.append(line)
+            else:
+                print("FAIL when parsing: ", linestring)
+
+            linestring = df.readline()
+            linecounter += 1
+
+        print("Read all %d lines.                     " % (filelength))
+
+    # Write compressed data to a csv file
+    np.savetxt(PARSED_DESTINATION, np.array(data), delimiter=",", fmt='%s')
 
 def clean():
-    kill()
-    os.system('rm ', DUMP_FILE)
-    os.system('rm ', NEIGHBORS_FILE)
-    os.system('rm ', PROCESSES_FILE)
+    kill_all()
+    os.system('rm ' + PERF_RECORD_FILE)
+    os.system('rm ' +  NEIGHBORS_FILE)
+    os.system('rm ' +  PROCESSES_FILE)
 
 def exec_from_args():
     global parser
@@ -212,21 +276,34 @@ def exec_from_args():
                     SENSOR_COMMAND: sensorstart,
                     SERVER_COMMAND: start_server,
                     EXPERIMENT_COMMAND: run_experiment,
-                    KILL_COMMAND: kill,
+                    KILL_COMMAND: kill_all,
                     CLEAN_COMMAND: clean,
-                    PARSE_COMMAND: parse}
+                    PROCESS_COMMAND: preprocess,
+                    PARSE_COMMAND: parse_results}
     parser.add_argument('command', choices=FUNCTION_MAP.keys())
-    #parser.add_argument('t')
+    parser.add_argument('-t', action="store", dest="exptime", type=int, default=10)
+
     args = parser.parse_args()
+    global exp_time
+    exp_time = args.exptime
     func = FUNCTION_MAP[args.command]
     func()
 
-def run_all(exp_time):
+def run_all():
     clean()
     find_neighbors()
     start_server()
+    time.sleep(2)
     sensorstart()
+    time.sleep(2)
     run_experiment(exp_time)
+    time.sleep(2)
+    kill_all()
+     # Don't know why, but somehow it needs killing twice.
+    time.sleep(2)
+    preprocess()
+    clean()
+    parse_results()
 
 if __name__ == "__main__":
     exec_from_args()
