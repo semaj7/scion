@@ -32,8 +32,8 @@ PARSED_DESTINATION = 'perf.csv'
 
 IPERF_LOG ="iperf_output.log"
 
-GENFOLDER = "/etc/gen/"
-GENFOLDER = "gen/"
+GENFOLDER = "/etc/scion/gen/"
+#GENFOLDER = "gen/"
 
 # Commands for CLI
 RUN_ALL_COMMAND = "runall"
@@ -64,7 +64,9 @@ def find_neighbors():
         for f in fileList:
             if f == "topology.json":
                 filepath = dirName+"/"+f
-                if re.fullmatch(r'gen/ISD\d+/AS.+/br\d+-.+/topology.json', filepath):
+
+                # Since our machine is an endhost, it's in an endhost folder. this may change from machine to machine.
+                if re.fullmatch(r'gen/ISD\d+/AS.+/endhost/topology.json', filepath):
                     print(filepath)
                     topofiles.append(filepath)
 
@@ -120,6 +122,8 @@ def start_server():
     ip = list(f.readlines())
     f.close()
     cmd = "iperf -s -e -i 1 -B " + ip[0]
+    cmd = "iperf -s -e -i 1"
+
     proc = subprocess.Popen(cmd, preexec_fn=os.setsid, shell=True)
     add_pid_tofile(proc)
     return
