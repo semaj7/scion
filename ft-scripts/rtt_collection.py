@@ -21,12 +21,12 @@ from ftutils import load_config
 CLIENT_INIT_DELAY = 2
 
 # Since we want to command with a CLI, we store the intermediate values in files.
-IP_ADDR_FILE='local_ip.txt'
+
+#IP_ADDR_FILE='local_ip.txt'
 NEIGHBORS_FILE='neighbors.txt'
 PROCESSES_FILE='processes.txt'
 PERF_RECORD_FILE= 'temp.perf.data'
 PERF_DUMP_FILE= 'perf.log'
-
 PARSED_DESTINATION = 'perf.csv'
 IPERF_LOG ="iperf_output.log"
 
@@ -42,7 +42,7 @@ PROCESS_COMMAND='preprocess'
 PARSE_COMMAND='parse'
 
 def add_pid_tofile(proc):
-    f = open(PROCESSES_FILE, 'a+')
+    f = open(config['processes_file'], 'a+')
     print("Adding ", str(proc.pid), " to the file.")
     f.write(str(proc.pid) + "\n")
     f.close()
@@ -52,6 +52,9 @@ def add_pid_tofile(proc):
 def find_neighbors():
     # Parse the gen files.
     topofiles = []
+    if not os.path.exists(config['genfolder']):
+        print("ERROR: When parsing neighbors, genfolder does not exist.")
+        return
     for dirName, _, fileList in os.walk(config['genfolder']):
         for f in fileList:
             if f == "topology.json":
@@ -101,7 +104,7 @@ def find_neighbors():
                      'Remote': interface['RemoteOverlay']['Addr']}
             neighbors.append(props)
     print("Parse genfiles to find neighbors...")
-    f = open(NEIGHBORS_FILE, 'w')
+    f = open(config['neighbors_file'], 'w')
     for neigh in neighbors:
         f.write(",".join(list(neigh.values())) + "\n")
     f.close()
@@ -127,7 +130,7 @@ def start_server():
 # Returns the process
 # TODO: fix precision problem: timestamp resolution too big and also number of packets are too small
 def start_srtt_collector():
-    cmd = "sudo perf record -e tcp:tcp_probe -o " +  PERF_RECORD_FILE +  " -T"# --filter dport==5002"
+    cmd = "sudo perf record -e tcp:tcp_probe -o " +  config['perf_record_file'] +  " -T"# --filter dport==5002"
     proc = subprocess.Popen(cmd.split(" "), preexec_fn=os.setsid)
     add_pid_tofile(proc)
     return
@@ -170,16 +173,16 @@ def run_experiment():
     if config['local_test']:
         neighbors = ['LOCALTEST,127.0.0.1,127.0.0.1']
     else:
-        if(not os.path.exists(NEIGHBORS_FILE)):
+        if(not os.path.exists(config['neighbors_file'])):
             print("ERROR: Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
             return
         print("Starting clients..")
-        f = open(NEIGHBORS_FILE)
+        f = open(config['neighbors_file'])
         neighbors = list(f.read().split("\n"))
         f.close()
     print("Neighbors: ", neighbors)
     client_procs, client_files = start_clients(neighbors)
-    time.sleep(config['experiment_time'])
+    time.sleep(config['rtt_experiment_time'])
     stop_clients(client_procs, client_files)
 
 def stop_clients(client_procs, client_files):
@@ -193,11 +196,11 @@ def stop_clients(client_procs, client_files):
 
 # TODO: This is probably not very safe yet, Anyone could change the pid file.
 def kill_all():
-    if (not os.path.exists(PROCESSES_FILE)):
+    if (not os.path.exists(config['processes_file'])):
         print("No Process file stored. Nothing to kill.")
         return
     print("Killing all Processes...")
-    f = open(PROCESSES_FILE, 'r')
+    f = open(config['processes_file'], 'r')
     pids = list(f.readlines())
     f.close()
     for pid in pids:
@@ -210,7 +213,7 @@ def kill_all():
 def preprocess():
     # Parse the dump, create datasets for each destination
     print("Preprocessing perf dump with 'perf report'.")
-    cmd = "sudo perf report --stdio -i " + PERF_RECORD_FILE + " -F time,sample,trace --header > " + PERF_DUMP_FILE
+    cmd = "sudo perf report --stdio -i " + config['perf_record_file'] + " -F time,sample,trace --header > " + config['perf_dump_file']
     os.system(cmd)
     print("Preprocessing done.")
 
@@ -227,13 +230,13 @@ def parse_results():
     data = []
     data.append(['timestamp', 'num_samples', 'source', 'dest', 'data_len', 'srtt'])
 
-    print("Parsing datafile " + PERF_DUMP_FILE + "...")
+    print("Parsing datafile " + config['perf_dump_file'] + "...")
 
-    wcOutput = str(subprocess.check_output(("wc -l " + PERF_DUMP_FILE).split()))
+    wcOutput = str(subprocess.check_output(("wc -l " + config['perf_dump_file']).split()))
     filelength = int(re.match(r'b\'(\d+).+', wcOutput).group(1))
     linecounter = 0
 
-    with open(PERF_DUMP_FILE, 'r') as df:
+    with open(config['perf_dump_file'], 'r') as df:
         linestring = '_'
         while (linestring):
 
@@ -259,8 +262,8 @@ def parse_results():
                 timestamp, num_samples, source, dest, data_len, srtt = match.groups()
                 line = [timestamp, num_samples, source, dest, data_len, srtt]
                 data.append(line)
-            else:
-                print("FAIL when parsing: ", linestring)
+            elif linestring != "":
+                print("FAIL when parsing the following line: ", linestring)
 
             linestring = df.readline()
             linecounter += 1
@@ -268,15 +271,15 @@ def parse_results():
         print("Read all %d lines.                     " % (filelength))
 
     # Write compressed data to a csv file
-    np.savetxt(PARSED_DESTINATION, np.array(data), delimiter=",", fmt='%s')
-    print("Saving parsed file in ", PARSED_DESTINATION)
+    np.savetxt(config['parsed_destination'], np.array(data), delimiter=",", fmt='%s')
+    print("Saving parsed file in ", config['parsed_destination'])
 
 def clean():
     kill_all()
-    os.system('rm ' + PERF_RECORD_FILE)
-    os.system('rm ' +  NEIGHBORS_FILE)
-    os.system('rm ' +  PROCESSES_FILE)
-    os.system('rm ' + PERF_DUMP_FILE)
+    os.system('rm ' + config['perf_record_file'])
+    os.system('rm ' +  config['neighbors_file'])
+    os.system('rm ' +  config['processes_file'])
+    #os.system('rm ' + config['perf_dump_file'])
 
 
 def exec_from_args():
@@ -300,7 +303,10 @@ def exec_from_args():
     func = FUNCTION_MAP[args.command]
     func()
 
-def run_all():
+def run_all(pass_config=None):
+    if pass_config:
+        global config
+        config = pass_config
     clean()
     find_neighbors()
     start_server()
@@ -315,6 +321,9 @@ def run_all():
     preprocess()
     clean()
     parse_results()
+
+
+
 
 if __name__ == "__main__":
     global config

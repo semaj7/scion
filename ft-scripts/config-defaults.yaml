@@ -6,8 +6,15 @@
 # These parameters are the ones that are designed t be changed. there are others, hardcoded in the script
 
 local_test: True  # For testing the RTT script locally, with iperf -c 127.0.0.1
-experiment_time: 10  # Clients send for this many seconds
-genfolder: '/etc/scion/gen/' # Used to find neighbors / findtopo
+rtt_experiment_time: 10  # Clients send for this many seconds
+genfolder: /etc/scion/gen/ # Used to find neighbors / findtopo
+
+neighbors_file: neighbors.txt
+processes_file: processes.txt
+perf_record_file: temp.perf.data
+perf_dump_file: perf.log
+parsed_destination: perf.csv
+iperf_log: iperf_output.log
 
 #=============================================
 
@@ -26,8 +33,10 @@ ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/s
 quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/quic_listener.go'
 quic_sender_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
 
-
 print_to_console: True
+
+tshark_suffix: _tshark.log
+
 
 # Resultfile Locations
 # Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect
@@ -39,16 +48,32 @@ fshaper_log:
 tshark_net_interface: 'lo'
 
 this_hostname: default_host
+
 hosts:
-    h1:
-        role: receiver
-        ip: 127.0.0.1
-    h2:
-        role: receiver
-        ip: 127.0.0.2
-    m:
-        role: sender
-        ip: 127.0.0.3
+    scionlab-1007-rtt:
+        ip: 122.248.221.20
+        scionaddr: 16-ffaa:0:1007,[172.31.27.114]
+        location: Singapore
+    scionlab-1004-rtt:
+        ip: 3.12.159.15
+        scionaddr: 16-ffaa:0:1004,[172.31.2.128]
+        location: Ohio
+    scionlab-1102-rtt:
+        ip: 129.132.121.187
+        scionaddr: 17-ffaa:0:1102,[129.132.121.187]
+        location: CAB
+
+hostname_label_map:
+    scionlab-1007-rtt: h1
+    scionlab-1004-rtt: h2
+    scionlab-1102-rtt: m
+    james-linux-host: tester
+
+label_role_map:
+    h1: receiver
+    h2: receiver
+    m: sender
+    tester: tester
 
 # These sampling resolutions affect the measurements
 tc_queue_sample_period: 0.001
@@ -61,7 +86,6 @@ plot_load_resolution: 0.1
 # Timing
 sender_delay_time: 2
 send_duration: 10 # In seconds
-receiver_duration: 20
 
 # Postprocessing
 truncate_front: 2

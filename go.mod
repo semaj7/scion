@@ -1,6 +1,6 @@
 module github.com/scionproto/scion
 
-replace github.com/lucas-clemente/quic-go => /home/cyrill/go/src/github.com/lucas-clemente/quic-go
+replace github.com/lucas-clemente/quic-go => /home/james/go/src/github.com/lucas-clemente/quic-go
 
 require (
 	github.com/BurntSushi/toml v0.3.1
