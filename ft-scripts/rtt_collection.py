@@ -20,16 +20,6 @@ from ftutils import load_config
 # Wait this many seconds until starting the clients.
 CLIENT_INIT_DELAY = 2
 
-# Since we want to command with a CLI, we store the intermediate values in files.
-
-#IP_ADDR_FILE='local_ip.txt'
-NEIGHBORS_FILE='neighbors.txt'
-PROCESSES_FILE='processes.txt'
-PERF_RECORD_FILE= 'temp.perf.data'
-PERF_DUMP_FILE= 'perf.log'
-PARSED_DESTINATION = 'perf.csv'
-IPERF_LOG ="iperf_output.log"
-
 # Commands for CLI
 RUN_ALL_COMMAND = "runall"
 NEIGHBORS_COMMAND = "topo"

@@ -77,16 +77,18 @@ def log(logContent):
 
 
 def startTshark():
-    fileoutput =config['result_dir']+'hostdata/'+config['this_hostname']+ config['tshark_suffix']
+    fileoutput = config['result_dir']+'hostdata/'+config['this_hostname']+ config['tshark_suffix']
     tcpDumpCommmand = ('tshark -i '+ config['tshark_net_interface'] + " -Y 'scion.udp.dstport==40002'")
     tcpDumpCommmand = ('tshark -i '+ config['tshark_net_interface'])
-    tcpDumpCommmand += " > " + fileoutput
-    subprocess.Popen(tcpDumpCommmand.split())
+   # tcpDumpCommmand += " > " + fileoutput
+    print("Exec: ", tcpDumpCommmand)
+    with open(fileoutput, 'w') as outfile:
+        subprocess.Popen(tcpDumpCommmand.split(), stderr=outfile, stdout=outfile)
     log("Started tshark.")
 
 def startFshaperHost():
     random.seed(config['this_hostname'])
-    fshaperlog = config['result_dir'] + "/hostlogs/" + config['this_hostname'] + "_fshaper.log"
+    fshaperlog = config['result_dir'] + "hostlogs/" + config['this_hostname'] + config['fshaper_suffix']
     command = "/usr/local/go/bin/go run " + config['quic_sender_location']
     log("Delaying for Listener to prepare...")
     time.sleep(config['sender_delay_time'])
@@ -94,13 +96,20 @@ def startFshaperHost():
 
     # fout = open(fshaperlog, 'w')
     # fout.write("Quic Client Output: \n")
+    print("Exec: ", command)
 
     goenv = os.environ.copy()
     goenv["GO111MODULE"] = "off"
 
     if not config['print_to_console']:
-        command += " > " + fshaperlog
-    proc = subprocess.Popen(command.split(), preexec_fn=os.setsid, shell=False, env=goenv)
+        #command += " > " + fshaperlog
+        with open(fshaperlog, 'w') as outfile:
+            proc = subprocess.Popen(command.split(), preexec_fn=os.setsid, shell=False, env=goenv,
+                                    stdout=outfile, stderr=outfile)
+    else:
+        proc = subprocess.Popen(command.split(), preexec_fn=os.setsid, shell=False, env=goenv)
+
+
     time.sleep(config['send_duration'])
     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     #os.system("sudo pkill quic")
@@ -108,22 +117,26 @@ def startFshaperHost():
 
 # Start iperf server with TCP on destination hosts
 def startQuicScionServer():
-    resfile = config['result_dir'] + "/hostlogs/" + config['this_hostname'] + "_quic_receiver.log"
+    resfile = config['result_dir'] + "hostlogs/" + config['this_hostname'] + config['quicrecv_suffix']
     quicListenerCommand = "/usr/local/go/bin/go run " + config['quic_listener_location']
     #quicListenerCommand = "/usr/local/go/bin/go"
 
     print("Executing: ", quicListenerCommand)
     log("Starting Quic Listener...")
-    log("Executing Command: " + quicListenerCommand)
     # fout = open(resfile, 'w')
     # fout.write("Quic Client Output: \n")
-
-    if not config['print_to_console']:
-        quicListenerCommand += " > " + resfile
+    print("Exec: ", quicListenerCommand)
 
     goenv = os.environ.copy()
     goenv["GO111MODULE"] = "off"
-    proc = subprocess.Popen(quicListenerCommand.split(), preexec_fn=os.setsid, env=goenv)
+
+    if not config['print_to_console']:
+        quicListenerCommand += " > " + resfile
+        with open(resfile, 'w') as outfile:
+            proc = subprocess.Popen(quicListenerCommand.split(), preexec_fn=os.setsid, env=goenv, stderr=outfile,
+                                    stdout=outfile)
+    else:
+        proc = subprocess.Popen(quicListenerCommand.split(), preexec_fn=os.setsid, env=goenv)
 
     # time.sleep(config['receiver_duration'])
     # os.killpg(os.getpgid(proc.pid), signal.SIGTERM)

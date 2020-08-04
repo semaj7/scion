@@ -33,10 +33,11 @@ ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/s
 quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/quic_listener.go'
 quic_sender_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
 
-print_to_console: True
+print_to_console: False
 
-tshark_suffix: _tshark.log
-
+tshark_suffix: '_tshark.log'
+fshaper_suffix: '_fshaper.log'
+quicrecv_suffix: '_quicrecv.log'
 
 # Resultfile Locations
 # Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect

@@ -27,8 +27,8 @@ def generateUniqueResultDir(experiment_name):
 
 
 def generateResultDir(name):
-
-    resultDir = 'results/'
+    curr_path = os.getcwd()
+    resultDir = curr_path + '/results/'
     #resultDir += datetime.strftime(datetime.now(), "%Y-%m-%d--%H-%M-%S") + "-"
     resultDir += name+ '/'
     os.system('mkdir -p ' + resultDir)
