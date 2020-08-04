@@ -1,8 +1,18 @@
 # This file gives the config defaults for all experiments.
-# It is designed for the 'BottleneckTopology'.
 
+#============================================
+
+# RTT Experiment
+# These parameters are the ones that are designed t be changed. there are others, hardcoded in the script
+
+local_test: True  # For testing the RTT script locally, with iperf -c 127.0.0.1
+experiment_time: 10  # Clients send for this many seconds
+genfolder: '/etc/scion/gen/' # Used to find neighbors / findtopo
+
+#=============================================
+
+# Flowtele experiment
 name: default_experiment
-
 
 # Source locations
 valloc_python_command: "pyhton2"

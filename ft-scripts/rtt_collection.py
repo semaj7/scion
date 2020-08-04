@@ -10,6 +10,7 @@ import argparse
 import os
 import json
 import numpy as np
+from ftutils import load_config
 
 # Script for starting the rtt collection
 # Run locally on a host representing an AS
@@ -19,8 +20,6 @@ import numpy as np
 # Wait this many seconds until starting the clients.
 CLIENT_INIT_DELAY = 2
 
-
-
 # Since we want to command with a CLI, we store the intermediate values in files.
 IP_ADDR_FILE='local_ip.txt'
 NEIGHBORS_FILE='neighbors.txt'
@@ -29,20 +28,16 @@ PERF_RECORD_FILE= 'temp.perf.data'
 PERF_DUMP_FILE= 'perf.log'
 
 PARSED_DESTINATION = 'perf.csv'
-
 IPERF_LOG ="iperf_output.log"
-
-GENFOLDER = "/etc/scion/gen/"
-#GENFOLDER = "gen/"
 
 # Commands for CLI
 RUN_ALL_COMMAND = "runall"
-NEIGHBORS_COMMAND = "findtopo"
-SENSOR_COMMAND = 'startsensor'
-SERVER_COMMAND= 'startserver'
+NEIGHBORS_COMMAND = "topo"
+SENSOR_COMMAND = 'sensor'
+SERVER_COMMAND= 'server'
 EXPERIMENT_COMMAND='run'
-KILL_COMMAND='killall'
-CLEAN_COMMAND='clean'
+KILL_COMMAND='kill'
+CLEAN_COMMAND='cleanall'
 PROCESS_COMMAND='preprocess'
 PARSE_COMMAND='parse'
 
@@ -54,17 +49,14 @@ def add_pid_tofile(proc):
 
 # Gather neighbors from gen file
 # Store into NEIGHBORFILE. Structure:       neighborAS,PublicOverlayIP,RemoteOverlayIP
-# TODO: since we are not 100% sure what the genfile in SCIONLab will look like, this might fail.
-# TODO:         if there are AS folders that do not belong to the AS, we need another configuration parameter
-#               that is checked against the folders we find in gen/
 def find_neighbors():
     # Parse the gen files.
     topofiles = []
-    for dirName, _, fileList in os.walk(GENFOLDER):
+    for dirName, _, fileList in os.walk(config['genfolder']):
         for f in fileList:
             if f == "topology.json":
                 filepath = dirName+"/"+f
-               
+
                 # Since our machine is an endhost, it's in an endhost folder. this may change from machine to machine.
                 if re.fullmatch(r'.+gen/ISD\d+/AS.+/endhost/topology.json', filepath):
                     print(filepath)
@@ -118,13 +110,13 @@ def find_neighbors():
 # Start servers
 def start_server():
     print("Starting Server...")
-    if not os.path.exists(IP_ADDR_FILE):
-        print("ERROR: LOCAL IP FILE ", IP_ADDR_FILE, 'is missing.')
-        return
-    f = open(IP_ADDR_FILE, 'r')
-    ip = list(f.readlines())
-    f.close()
-    cmd = "iperf -s -e -i 1 -B " + ip[0]
+    # if not os.path.exists(IP_ADDR_FILE):
+    #     print("ERROR: LOCAL IP FILE ", IP_ADDR_FILE, 'is missing.')
+    #     return
+    # f = open(IP_ADDR_FILE, 'r')
+    # ip = list(f.readlines())
+    # f.close()
+    #cmd = "iperf -s -e -i 1 -B " + ip[0]
     cmd = "iperf -s -e -i 1"
 
     proc = subprocess.Popen(cmd, preexec_fn=os.setsid, shell=True)
@@ -135,7 +127,7 @@ def start_server():
 # Returns the process
 # TODO: fix precision problem: timestamp resolution too big and also number of packets are too small
 def start_srtt_collector():
-    cmd = "sudo perf record -e tcp:tcp_probe -o " +  PERF_RECORD_FILE +  " -T --filter dport==5002"
+    cmd = "sudo perf record -e tcp:tcp_probe -o " +  PERF_RECORD_FILE +  " -T"# --filter dport==5002"
     proc = subprocess.Popen(cmd.split(" "), preexec_fn=os.setsid)
     add_pid_tofile(proc)
     return
@@ -145,6 +137,9 @@ def start_srtt_collector():
 def start_clients(neighbors):
     client_procs = []
     client_files = []
+
+
+
     i = 0
     for neigh_line in neighbors:
         i += 1
@@ -167,21 +162,24 @@ def start_clients(neighbors):
     return client_procs, client_files
 
 def sensorstart():
-    print("Starting perc to colelct srtt...")
+    print("Starting perf to collect srtt...")
     collector_proc = start_srtt_collector()
     return collector_proc
 
-
-def run_experiment(runtime=10):
-    if(not os.path.exists(NEIGHBORS_FILE)):
-        print("Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
-    print("Starting clients..")
-    f = open(NEIGHBORS_FILE)
-    neighbors = list(f.read().split("\n"))
-    f.close()
+def run_experiment():
+    if config['local_test']:
+        neighbors = ['LOCALTEST,127.0.0.1,127.0.0.1']
+    else:
+        if(not os.path.exists(NEIGHBORS_FILE)):
+            print("ERROR: Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
+            return
+        print("Starting clients..")
+        f = open(NEIGHBORS_FILE)
+        neighbors = list(f.read().split("\n"))
+        f.close()
     print("Neighbors: ", neighbors)
     client_procs, client_files = start_clients(neighbors)
-    time.sleep(runtime)
+    time.sleep(config['experiment_time'])
     stop_clients(client_procs, client_files)
 
 def stop_clients(client_procs, client_files):
@@ -205,13 +203,16 @@ def kill_all():
     for pid in pids:
         print("Killing ", str(pid))
         os.system('sudo kill ' + pid)
-
+    os.system("pkill iperf")
+    os.system("pkill perf")
 
 # Preprocess results, from record format to report
 def preprocess():
     # Parse the dump, create datasets for each destination
+    print("Preprocessing perf dump with 'perf report'.")
     cmd = "sudo perf report --stdio -i " + PERF_RECORD_FILE + " -F time,sample,trace --header > " + PERF_DUMP_FILE
     os.system(cmd)
+    print("Preprocessing done.")
 
 # Parse and merge perf dump
 # Store in csv file.
@@ -268,15 +269,18 @@ def parse_results():
 
     # Write compressed data to a csv file
     np.savetxt(PARSED_DESTINATION, np.array(data), delimiter=",", fmt='%s')
+    print("Saving parsed file in ", PARSED_DESTINATION)
 
 def clean():
     kill_all()
     os.system('rm ' + PERF_RECORD_FILE)
     os.system('rm ' +  NEIGHBORS_FILE)
     os.system('rm ' +  PROCESSES_FILE)
+    os.system('rm ' + PERF_DUMP_FILE)
+
 
 def exec_from_args():
-    global parser
+    #global parser
     parser = argparse.ArgumentParser()
     FUNCTION_MAP = {RUN_ALL_COMMAND: run_all,
                     NEIGHBORS_COMMAND: find_neighbors,
@@ -288,11 +292,11 @@ def exec_from_args():
                     PROCESS_COMMAND: preprocess,
                     PARSE_COMMAND: parse_results}
     parser.add_argument('command', choices=FUNCTION_MAP.keys())
-    parser.add_argument('-t', action="store", dest="exptime", type=int, default=10)
+    #parser.add_argument('-t', action="store", dest="exptime", type=int, default=10)
 
     args = parser.parse_args()
-    global exp_time
-    exp_time = args.exptime
+    # global exp_time
+    # exp_time = args.exptime
     func = FUNCTION_MAP[args.command]
     func()
 
@@ -303,7 +307,7 @@ def run_all():
     time.sleep(2)
     sensorstart()
     time.sleep(2)
-    run_experiment(exp_time)
+    run_experiment()
     time.sleep(2)
     kill_all()
      # Don't know why, but somehow it needs killing twice.
@@ -313,4 +317,7 @@ def run_all():
     parse_results()
 
 if __name__ == "__main__":
+    global config
+    config = load_config('ft-scripts/config-defaults.yaml')
+    # Note: there is more config on the top of this file
     exec_from_args()

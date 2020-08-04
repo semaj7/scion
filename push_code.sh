@@ -11,5 +11,5 @@ done
 for IP in "${IPS[@]}"
 do
 	echo "Starting rsync on $IP"
-        rsync -avz --exclude-from exclude-rsynch.txt -e ssh ~/go/src/github.com/scionproto/scion scionlab@${IP}:/home/scionlab/go/src/github.com/scionproto/scion 
+        rsync -avz --exclude-from exclude-rsynch.txt -e ssh ~/go/src/github.com/scionproto/scion scionlab@${IP}:/home/scionlab/go/src/github.com/scionproto/ 
 done

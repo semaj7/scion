@@ -19,6 +19,7 @@ import yaml
 from collections import Counter
 import random
 import signal
+from ftutils import load_config
 
 def initiateLog(hostID):
     hostlogfile = config['result_dir']+"hostlogs/%s.log" % hostID
@@ -152,8 +153,7 @@ def setup_configuration(explicit_config=None):
     global config
     if explicit_config is None:
         # Load Default Config
-        with open("ft-scripts/config-defaults.yaml", "r") as ymlfile:
-            config = yaml.load(ymlfile)
+        config = load_config("ft-scripts/config-defaults.yaml")
             # Load Arguments
             #setLogLevel(config['scion_log_level'])
             # if len(sys.argv) > 1:
