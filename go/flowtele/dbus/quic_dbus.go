@@ -5,13 +5,15 @@ import (
 	"time"
 
 	"github.com/godbus/dbus"
+	"github.com/lucas-clemente/quic-go"
 )
 
-
 const (
-	QUIC_SERVICE_NAME = "ch.ethz.netsec.flowtele.quic"
+	QUIC_SERVICE_NAME   = "ch.ethz.netsec.flowtele.quic"
 	QUIC_INTERFACE_NAME = "ch.ethz.netsec.flowtele.quic"
-	QUIC_OBJECT_PATH = "/ch/ethz/netsec/flowtele/quic"
+	QUIC_OBJECT_PATH    = "/ch/ethz/netsec/flowtele/quic"
+
+	LOG_INTERVAL = time.Millisecond * 5
 )
 
 type quicDbusMethodInterface struct {
@@ -19,21 +21,36 @@ type quicDbusMethodInterface struct {
 }
 
 func (qdbmi quicDbusMethodInterface) ApplyControl(dType uint32, beta float64, cwnd_adjust int16, cwnd_max_adjust int16, use_conservative_allocation bool) (ret bool, dbusError *dbus.Error) {
-	// apply CC params to QUIC connections
-	// quicDbusMethodInterface.dbusBase.Send(...)
+	start := time.Now()
 	qdb := qdbmi.quicDbus
-	qdb.Log("received ApplyControl(%d, %f, %d, %d, %t)", dType, beta, cwnd_adjust, cwnd_max_adjust, use_conservative_allocation)
-	return true, nil
+	session := qdb.Session
+	if !qdb.applyControl {
+		qdb.Log("not forwarding ApplyControl to QUIC flow %d", qdb.FlowId)
+		return false, nil
+	} else if session != nil {
+		ret := session.ApplyControl(beta, cwnd_adjust, cwnd_max_adjust, use_conservative_allocation)
+		qdb.Log("apply control returned %t at %v", ret, time.Now().Sub(start))
+		return ret, nil
+	} else {
+		qdb.Log("QUIC session not set, received ApplyControl(%d, %f, %d, %d, %t)", dType, beta, cwnd_adjust, cwnd_max_adjust, use_conservative_allocation)
+		return false, nil
+	}
 }
 
 type QuicDbus struct {
 	DbusBase
-	FlowId int32
+	FlowId             int32
+	Session            quic.Session
+	lastLogTime        map[QuicDbusSignalType]time.Time
+	logMessagesSkipped map[QuicDbusSignalType]uint64
+	applyControl       bool
 }
 
-func NewQuicDbus(flowId int32) *QuicDbus {
+func NewQuicDbus(flowId int32, applyControl bool) *QuicDbus {
 	var d QuicDbus
+	d.Init()
 	d.FlowId = flowId
+	d.applyControl = applyControl
 	d.ServiceName = getQuicServiceName(flowId)
 	d.ObjectPath = getQuicObjectPath(flowId)
 	d.InterfaceName = getQuicInterfaceName(flowId)
@@ -41,7 +58,54 @@ func NewQuicDbus(flowId int32) *QuicDbus {
 	d.ExportedMethods = quicDbusMethodInterface{quicDbus: &d}
 	d.SignalMatchOptions = []dbus.MatchOption{}
 	d.ExportedSignals = allQuicDbusSignals()
+	d.lastLogTime = make(map[QuicDbusSignalType]time.Time)
+	d.logMessagesSkipped = make(map[QuicDbusSignalType]uint64)
 	return &d
+}
+
+func (qdb *QuicDbus) LogRtt(t time.Time, rtt time.Duration) {
+	val, ok := qdb.lastLogTime[Rtt]
+	if !ok || t.Sub(val) > LOG_INTERVAL {
+		nSkipped := uint64(0)
+		if val2, ok2 := qdb.logMessagesSkipped[Rtt]; ok2 {
+			nSkipped = val2
+		}
+		qdb.Log("RTT (skipped %d) srtt = %d", nSkipped, rtt.Milliseconds())
+		qdb.lastLogTime[Rtt] = t
+		qdb.logMessagesSkipped[Rtt] = 0
+	} else {
+		qdb.logMessagesSkipped[Rtt] = qdb.logMessagesSkipped[Rtt] + 1
+	}
+}
+
+func (qdb *QuicDbus) LogLost(t time.Time, ssthresh uint64) {
+	val, ok := qdb.lastLogTime[Lost]
+	if !ok || t.Sub(val) > LOG_INTERVAL {
+		nSkipped := uint64(0)
+		if val2, ok2 := qdb.logMessagesSkipped[Lost]; ok2 {
+			nSkipped = val2
+		}
+		qdb.Log("Lost (skipped %d) ssthresh = %d", nSkipped, ssthresh)
+		qdb.lastLogTime[Lost] = t
+		qdb.logMessagesSkipped[Lost] = 0
+	} else {
+		qdb.logMessagesSkipped[Lost] = qdb.logMessagesSkipped[Lost] + 1
+	}
+}
+
+func (qdb *QuicDbus) LogAcked(t time.Time, congestionWindow uint64, packetsInFlight uint64, ackedBytes uint64) {
+	val, ok := qdb.lastLogTime[Cwnd]
+	if !ok || t.Sub(val) > LOG_INTERVAL {
+		nSkipped := uint64(0)
+		if val2, ok2 := qdb.logMessagesSkipped[Cwnd]; ok2 {
+			nSkipped = val2
+		}
+		qdb.Log("Cwnd (skipped %d) cwnd = %d, inflight = %d, acked = %d", nSkipped, congestionWindow, packetsInFlight, ackedBytes)
+		qdb.lastLogTime[Cwnd] = t
+		qdb.logMessagesSkipped[Cwnd] = 0
+	} else {
+		qdb.logMessagesSkipped[Cwnd] = qdb.logMessagesSkipped[Cwnd] + 1
+	}
 }
 
 func (qdb *QuicDbus) SendRttSignal(t time.Time, rtt uint32) {
@@ -52,8 +116,8 @@ func (qdb *QuicDbus) SendLostSignal(t time.Time, newSsthresh uint32) {
 	qdb.Send(CreateQuicDbusSignalLost(qdb.FlowId, t, newSsthresh))
 }
 
-func (qdb *QuicDbus) SendCwndSignal(t time.Time, cwnd uint32, pktsInFlight int32) {
-	qdb.Send(CreateQuicDbusSignalCwnd(qdb.FlowId, t, cwnd, pktsInFlight))
+func (qdb *QuicDbus) SendCwndSignal(t time.Time, cwnd uint32, pktsInFlight int32, ackedBytes uint32) {
+	qdb.Send(CreateQuicDbusSignalCwnd(qdb.FlowId, t, cwnd, pktsInFlight, ackedBytes))
 }
 
 func getQuicServiceName(flowId int32) string {

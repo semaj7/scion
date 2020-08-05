@@ -1,18 +1,18 @@
 package flowteledbus
 
 import (
-	"time"
 	"reflect"
+	"time"
 
 	"github.com/godbus/dbus"
 	"github.com/godbus/dbus/introspect"
 )
 
-
 type DbusSignal interface {
 	Name() string
 	Values() []interface{}
 	IntrospectSignal() introspect.Signal
+	SignalType() QuicDbusSignalType
 }
 
 type QuicDbusSignalType int
@@ -30,7 +30,7 @@ const (
 )
 
 type dbusSignalStruct struct {
-	Type QuicDbusSignalType
+	Type  QuicDbusSignalType
 	Value interface{}
 }
 
@@ -72,12 +72,16 @@ func (s *dbusSignalStruct) IntrospectSignal() introspect.Signal {
 	return introspect.Signal{Name: s.Name(), Args: arg_list}
 }
 
-func createReportDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32) DbusSignal{
-	return &dbusSignalStruct{t, struct{
-		Flow int32
-		TvSec uint64
+func (s *dbusSignalStruct) SignalType() QuicDbusSignalType {
+	return s.Type
+}
+
+func createReportDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32) DbusSignal {
+	return &dbusSignalStruct{t, struct {
+		Flow   int32
+		TvSec  uint64
 		TvNsec uint32
-		V0 uint32
+		V0     uint32
 	}{
 		int32(flow),
 		uint64(time.Unix()),
@@ -86,29 +90,13 @@ func createReportDbusSignalUint32(t QuicDbusSignalType, flow int32, time time.Ti
 	}}
 }
 
-func createReportDbusSignalUint32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 uint32) DbusSignal{
-	return &dbusSignalStruct{t, struct{
-		Flow int32
-		TvSec uint64
+func createReportDbusSignalUint32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 uint32) DbusSignal {
+	return &dbusSignalStruct{t, struct {
+		Flow   int32
+		TvSec  uint64
 		TvNsec uint32
-		V0 uint32
-		V1 uint32
-	}{
-		int32(flow),
-		uint64(time.Unix()),
-		uint32(time.Nanosecond()),
-		v0,
-		v1,
-	}}
-}
-
-func createReportDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32) DbusSignal{
-	return &dbusSignalStruct{t, struct{
-		Flow int32
-		TvSec uint64
-		TvNsec uint32
-		V0 uint32
-		V1 int32
+		V0     uint32
+		V1     uint32
 	}{
 		int32(flow),
 		uint64(time.Unix()),
@@ -118,14 +106,30 @@ func createReportDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time ti
 	}}
 }
 
-func createReportDbusSignalUint32Int32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32, v2 uint32) DbusSignal{
-	return &dbusSignalStruct{t, struct{
-		Flow int32
-		TvSec uint64
+func createReportDbusSignalUint32Int32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32) DbusSignal {
+	return &dbusSignalStruct{t, struct {
+		Flow   int32
+		TvSec  uint64
 		TvNsec uint32
-		V0 uint32
-		V1 int32
-		V2 uint32
+		V0     uint32
+		V1     int32
+	}{
+		int32(flow),
+		uint64(time.Unix()),
+		uint32(time.Nanosecond()),
+		v0,
+		v1,
+	}}
+}
+
+func createReportDbusSignalUint32Int32Uint32(t QuicDbusSignalType, flow int32, time time.Time, v0 uint32, v1 int32, v2 uint32) DbusSignal {
+	return &dbusSignalStruct{t, struct {
+		Flow   int32
+		TvSec  uint64
+		TvNsec uint32
+		V0     uint32
+		V1     int32
+		V2     uint32
 	}{
 		int32(flow),
 		uint64(time.Unix()),
@@ -136,7 +140,7 @@ func createReportDbusSignalUint32Int32Uint32(t QuicDbusSignalType, flow int32, t
 	}}
 }
 
-func transform_struct_to_field_list(in_struct interface{}) ([]interface{}) {
+func transform_struct_to_field_list(in_struct interface{}) []interface{} {
 	var field_list []interface{}
 	v := reflect.ValueOf(in_struct)
 	t := reflect.TypeOf(in_struct)
