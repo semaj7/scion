@@ -31,15 +31,57 @@ CLEAN_COMMAND='cleanall'
 PROCESS_COMMAND='preprocess'
 PARSE_COMMAND='parse'
 
+# Takes ip1 and ip2, and the map and returns the corresponding port.
+def get_port_from_edge(ip1, ip2, host_port_map):
+    iplower = ip1 if ip1 < ip2 else ip2
+    ipupper = ip1 if ip1 >= ip2 else ip2
+    if host_port_map.__contains__((iplower, ipupper)):
+        return host_port_map[(iplower, ipupper)]
+    else:
+        return -2 # Code for port not found
+
+# Creates a map that takes two labels (unordered) and assigns a value.
+# This algo is a naive implementation and will assign a value for each possible neighbor edge, regardless of what edges
+#   actually exist.
+def create_edge_port_map():
+    portmap = {}
+    # with open(config['rtt_hosts_file']) as f:
+    #     host_ips = list(f.readlines())
+    host_ips = list(config['rtt_hosts'].values())
+    n = len(host_ips)
+    if config['iperf_port_end'] - config['iperf_port_start'] < n:
+        print("ERROR: Too many RTT Hosts for the limited number of ports. Improve algo or change port range.")
+        raise Exception
+    count =  config['iperf_port_start']
+    for i in range(n):
+        for j in range(i+1, n):
+            ip1 = host_ips[i]
+            ip2 = host_ips[j]
+            # Need to Establish global order so that the edges are bidirectinal
+            #   (so that the labels (ip1,ip2) and (ip2,ip1) map to the same.
+            iplower = ip1 if ip1 < ip2 else ip2
+            ipupper = ip1 if ip1 >= ip2 else ip2
+            portmap[(iplower,ipupper)] = count
+            count += 1
+
+    print(portmap)
+    return portmap
+
 def add_pid_tofile(proc):
     f = open(config['processes_file'], 'a+')
     print("Adding ", str(proc.pid), " to the file.")
     f.write(str(proc.pid) + "\n")
     f.close()
 
+
+def analyse_topo():
+    host_port_map = create_edge_port_map()
+    find_neighbors(host_port_map)
+
+
 # Gather neighbors from gen file
 # Store into NEIGHBORFILE. Structure:       neighborAS,PublicOverlayIP,RemoteOverlayIP
-def find_neighbors():
+def find_neighbors(host_port_map):
     # Parse the gen files.
     topofiles = []
     if not os.path.exists(config['genfolder']):
@@ -82,16 +124,22 @@ def find_neighbors():
     with open(topofile) as f:
         topo = json.load(f)
 
-    if num_brs != len(topo['BorderRouters']):
-        print("WARNING: the number of border router folders is not identical to the number of border router entries"
-              " in the topology.json file: in json: ", len(topo['BorderRouters']), " folders: ", brs)
+    # if num_brs != len(topo['BorderRouters']):
+    #     print("WARNING: the number of border router folders is not identical to the number of border router entries"
+    #           " in the topology.json file: in json: ", len(topo['BorderRouters']), " folders: ", brs)
 
+    hostname = os.uname()[1]
     for br_props in topo['BorderRouters']:
         ifs_config = topo['BorderRouters'][br_props]["Interfaces"]
         for ifs in ifs_config:
             interface = ifs_config[ifs]
+            if config['rtt_hosts'].__contains__(hostname):
+                own_ip = config['rtt_hosts'][hostname]
+                port = get_port_from_edge(own_ip, interface['RemoteOverlay']['Addr'], host_port_map)
+            else:
+                port = -1 # Code for ignoring this neighbor. Can also be returned by get_port_from_edge
             props = {'ISD_AS': interface['ISD_AS'], 'Public': interface['PublicOverlay']['Addr'],
-                     'Remote': interface['RemoteOverlay']['Addr']}
+                     'Remote': interface['RemoteOverlay']['Addr'], "Port": str(port)}
             neighbors.append(props)
     print("Parse genfiles to find neighbors...")
     f = open(config['neighbors_file'], 'w')
@@ -100,20 +148,20 @@ def find_neighbors():
     f.close()
     return
 
-# Start servers
-def start_server():
+# Start servers. One for each neighbor.
+def start_servers():
     print("Starting Server...")
-    # if not os.path.exists(IP_ADDR_FILE):
-    #     print("ERROR: LOCAL IP FILE ", IP_ADDR_FILE, 'is missing.')
-    #     return
-    # f = open(IP_ADDR_FILE, 'r')
-    # ip = list(f.readlines())
-    # f.close()
-    #cmd = "iperf -s -e -i 1 -B " + ip[0]
-    cmd = "iperf -s -e -i 1"
+    print("Loading Neighbors.")
+    neighbors = load_accessable_neighbors()
 
-    proc = subprocess.Popen(cmd, preexec_fn=os.setsid, shell=True)
-    add_pid_tofile(proc)
+    for neigh_ip, port in neighbors:
+        # Use this one with the port specification for local testing (when IP is the same)
+        # cmd = "/usr/bin/iperf -c " + neigh_ip + " -p " + str(5000 + i) +  " -b 1Mbits -i 1 -t 0 -e"
+        cmd = "iperf3 -s -i 1 -p " + str(port)
+        print("Execute: ", cmd.split())
+        with open("iperf_server_" + str(port) + ".log", 'w') as f:
+            proc = subprocess.Popen(cmd.split(), stdout=f, preexec_fn=os.setsid)
+        add_pid_tofile(proc)
     return
 
 # Start a process that collets srtt with iperf
@@ -131,24 +179,16 @@ def start_clients(neighbors):
     client_procs = []
     client_files = []
 
-
-
-    i = 0
-    for neigh_line in neighbors:
-        i += 1
-        if neigh_line == "":
-            continue
-
-        asname, publicip, remoteip = neigh_line.split(",")
-        neigh_ip = publicip # TODO: see if this is true
+    for neigh_ip, port in neighbors:
 
         # Use this one with the port specification for local testing (when IP is the same)
         #cmd = "/usr/bin/iperf -c " + neigh_ip + " -p " + str(5000 + i) +  " -b 1Mbits -i 1 -t 0 -e"
 
-        cmd = "/usr/bin/iperf -c " + neigh_ip +  " -b 1Mbits -i 1 -t 0 -e"
+        cmd = "iperf3 -c " + neigh_ip +  " -b 1Mbits -i 1 -t 0 -M 1448 -p " + str(port)
 
-        f = open("iperf_client" + str(i) + ".log", 'w')
         print("Execute: ", cmd.split())
+        f = open("iperf_client_" + str(port) + ".log", 'w')
+
         proc = subprocess.Popen(cmd.split(), stdout=f, preexec_fn=os.setsid)
         add_pid_tofile(proc)
         client_procs.append(proc)
@@ -159,18 +199,41 @@ def sensorstart():
     collector_proc = start_srtt_collector()
     return collector_proc
 
-def run_experiment():
+# Load neighbors from neighbor file and make sure the ports are valid.
+def load_accessable_neighbors():
     if config['local_test']:
-        neighbors = ['LOCALTEST,127.0.0.1,127.0.0.1']
-    else:
-        if(not os.path.exists(config['neighbors_file'])):
-            print("ERROR: Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
-            return
-        print("Starting clients..")
-        f = open(config['neighbors_file'])
-        neighbors = list(f.read().split("\n"))
-        f.close()
-    print("Neighbors: ", neighbors)
+        print("SETTING: LOCAL TEST")
+        return ['127.0.0.1', '5001']
+
+    if (not os.path.exists(config['neighbors_file'])):
+        print("ERROR: Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
+        return []
+    f = open(config['neighbors_file'])
+    neighbor_lines = list(f.read().split("\n"))
+    f.close()
+    neighbors = []
+    for neigh_line in neighbor_lines:
+        if neigh_line == "":
+            continue
+
+        asname, publicip, remoteip, port = neigh_line.split(",")
+        neigh_ip = remoteip # TODO: see if this is true
+
+        # Port -1 means: no entry for local IP
+        if int(port) < 0:
+            print("WARNING: Will not connect with neighbor ", remoteip, end="")
+            if int(port) == -1:
+                print(". Local IP not found in config.")
+            if int(port) == -2:
+                print(". Edge not defined. Neighbors not found in config.")
+            continue
+        neighbors.append([neigh_ip, port])
+    print("Accessible Neighbors: ", neighbors)
+    return neighbors
+
+def run_experiment():
+    neighbors = load_accessable_neighbors()
+    print("Starting clients..")
     client_procs, client_files = start_clients(neighbors)
     time.sleep(config['rtt_experiment_time'])
     stop_clients(client_procs, client_files)
@@ -229,8 +292,6 @@ def parse_results():
     with open(config['perf_dump_file'], 'r') as df:
         linestring = '_'
         while (linestring):
-
-
             # Show progress
             if linecounter % 100000 == 0:
                 print("Read %d / %d lines." % (linecounter, filelength), end="\r")
@@ -241,11 +302,7 @@ def parse_results():
                 linecounter += 1
                 continue
 
-            matchstring = r'(\s*\d+\.\d+)\s+(\d+)\s+src=(\S+)\s+dest=(\S+).+data_len=(\d+).+srtt=(\d+).+'
-            matchstring = r'.*\d+.*'
-            r'gen/ISD\d+/AS.+/br\d+-.+/topology.json'
             match = re.match(r'.*(\d+\.\d+)\s+(\d+)\s+src=(\S+)\s+dest=(\S+).*data_len=(\d+).*srtt=(\d+).*', linestring)
-            #match = re.match(r'.*(\d+\.\d+).*', linestring)
 
             if match:
                 print(match.groups())
@@ -276,9 +333,9 @@ def exec_from_args():
     #global parser
     parser = argparse.ArgumentParser()
     FUNCTION_MAP = {RUN_ALL_COMMAND: run_all,
-                    NEIGHBORS_COMMAND: find_neighbors,
+                    NEIGHBORS_COMMAND: analyse_topo,
                     SENSOR_COMMAND: sensorstart,
-                    SERVER_COMMAND: start_server,
+                    SERVER_COMMAND: start_servers,
                     EXPERIMENT_COMMAND: run_experiment,
                     KILL_COMMAND: kill_all,
                     CLEAN_COMMAND: clean,
@@ -299,7 +356,7 @@ def run_all(pass_config=None):
         config = pass_config
     clean()
     find_neighbors()
-    start_server()
+    start_servers()
     time.sleep(2)
     sensorstart()
     time.sleep(2)

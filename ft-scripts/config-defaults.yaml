@@ -16,6 +16,13 @@ perf_dump_file: perf.log
 parsed_destination: perf.csv
 iperf_log: iperf_output.log
 
+rtt_hosts:
+    scionlab-1007-rtt: 122.248.221.20
+    scionlab-1004-rtt: 3.12.159.15
+    scionlab-1102-rtt: 129.132.121.187
+
+iperf_port_start: 49152
+iperf_port_end: 65535
 #=============================================
 
 # Flowtele experiment
@@ -156,3 +163,6 @@ inferred:
 
 
 delete_raw_dump: False  # Deletes the raw data after logparser condensed it# TODO: implement
+
+
+
