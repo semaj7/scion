@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -10,17 +11,33 @@ import (
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
+
+	"github.com/scionproto/scion/go/lib/addr"
+	sd "github.com/scionproto/scion/go/lib/sciond"
+	"github.com/scionproto/scion/go/lib/snet"
+	"github.com/scionproto/scion/go/lib/snet/squic"
+	"github.com/scionproto/scion/go/lib/sock/reliable"
 )
 
 var (
-	tlsConfig    tls.Config
+	tlsConfig tls.Config
+	localIA   addr.IA
+
 	listenAddr   = flag.String("ip", "127.0.0.1", "IP address to listen on")
 	listenPort   = flag.Int("port", 5500, "Port number to listen on")
 	nConnections = flag.Int("num", 12, "Number of QUIC connections using increasing port numbers")
 	keyPath      = flag.String("key", "go/flowtele/tls.key", "TLS key file")
 	pemPath      = flag.String("pem", "go/flowtele/tls.pem", "TLS certificate file")
 	messageSize  = flag.Int("message-size", 10000000, "size of the message that should be received as a whole")
+
+	useScion   = flag.Bool("scion", false, "Open scion quic sockets")
+	dispatcher = flag.String("dispatcher", "", "Path to dispatcher socket")
+	sciondAddr = flag.String("sciond", sd.DefaultSCIONDAddress, "SCIOND address")
 )
+
+func init() {
+	flag.Var(&localIA, "local-ia", "ISD-AS address to listen on")
+}
 
 // create certificate and key with
 // openssl req -new -newkey rsa:4096 -x509 -sha256 -days 365 -nodes -out tls.pem -keyout tls.key
@@ -34,15 +51,35 @@ func initTlsCert() error {
 	return nil
 }
 
-func startListener(addr *net.UDPAddr) error {
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		fmt.Printf("Error starting UDP listener: %s\n", err)
-		return err
-	}
-	// make QUIC idle timout long to allow a delay between starting the listeners and the senders
+func getQuicListener(lAddr *net.UDPAddr, useScion bool) (quic.Listener, error) {
 	quicConfig := &quic.Config{IdleTimeout: time.Hour}
-	server, err := quic.Listen(conn, &tlsConfig, quicConfig)
+	if useScion {
+		ds := reliable.NewDispatcher(*dispatcher)
+		sciondConn, err := sd.NewService(*sciondAddr).Connect(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("Unable to initialize SCION network (%s)", err)
+		}
+		network := snet.NewNetworkWithPR(localIA, ds, &sd.Querier{
+			Connector: sciondConn,
+			IA:        localIA,
+		}, sd.RevHandler{Connector: sciondConn})
+		if err != nil {
+			return nil, fmt.Errorf("Unable to initialize SCION network (%s)", err)
+		}
+		return squic.Listen(network, lAddr, addr.SvcNone, quicConfig)
+	} else {
+		conn, err := net.ListenUDP("udp", lAddr)
+		if err != nil {
+			fmt.Printf("Error starting UDP listener: %s\n", err)
+			return nil, err
+		}
+		// make QUIC idle timout long to allow a delay between starting the listeners and the senders
+		return quic.Listen(conn, &tlsConfig, quicConfig)
+	}
+}
+
+func startListener(lAddr *net.UDPAddr, useScion bool) error {
+	server, err := getQuicListener(lAddr, useScion)
 	if err != nil {
 		fmt.Printf("Error starting QUIC listener: %s\n", err)
 		return err
@@ -80,7 +117,7 @@ func startListener(addr *net.UDPAddr) error {
 		// MBit/s
 		curRate := float64(n) / tCur / 1000000.0 * 8.0
 		totRate := float64(nTot) / tTot / 1000000.0 * 8.0
-		fmt.Printf("%d cur: %.1fMBit/s (%.1fMB in %.2fs), tot: %.1fMBit/s (%.1fMB in %.2fs)\n", addr.Port, curRate, float64(n)/1000000, tCur, totRate, float64(nTot)/1000000, tTot)
+		fmt.Printf("%d cur: %.1fMBit/s (%.1fMB in %.2fs), tot: %.1fMBit/s (%.1fMB in %.2fs)\n", lAddr.Port, curRate, float64(n)/1000000, tCur, totRate, float64(nTot)/1000000, tTot)
 	}
 	return nil
 }
@@ -91,7 +128,7 @@ func main() {
 	errs := make(chan error)
 	for i := 0; i < *nConnections; i++ {
 		go func(port int) {
-			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}); err != nil {
+			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}, *useScion); err != nil {
 				errs <- err
 			}
 		}(*listenPort + i)

@@ -136,6 +136,10 @@ func startQuicSender(remoteAddress net.UDPAddr, flowId int32, applyControl bool)
 	flowteleSignalInterface := quic.CreateFlowteleSignalInterface(newSrttMeasurement, packetsLost, packetsAcked)
 	// make QUIC idle timout long to allow a delay between starting the listeners and the senders
 	quicConfig := &quic.Config{IdleTimeout: time.Hour,
+		Versions: []quic.VersionNumber{
+			quic.VersionGQUIC43,
+			quic.VersionGQUIC39,
+		},
 		FlowteleSignalInterface: flowteleSignalInterface}
 	session, err := quic.Dial(conn, &remoteAddress, "host:0", tlsConfig, quicConfig)
 	if err != nil {
