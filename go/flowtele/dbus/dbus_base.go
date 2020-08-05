@@ -3,28 +3,65 @@ package flowteledbus
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/godbus/dbus"
 	"github.com/godbus/dbus/introspect"
 )
 
-
 type DbusBase struct {
-	ServiceName string
-	ObjectPath dbus.ObjectPath
-	InterfaceName string
-	Conn *dbus.Conn
+	ServiceName    string
+	ObjectPath     dbus.ObjectPath
+	InterfaceName  string
+	Conn           *dbus.Conn
 	SignalListener chan *dbus.Signal
 
-	ExportedMethods interface{}
+	ExportedMethods    interface{}
 	SignalMatchOptions []dbus.MatchOption
-	ExportedSignals []introspect.Signal
+	ExportedSignals    []introspect.Signal
+
+	SignalMinInterval map[QuicDbusSignalType]time.Duration
+	lastSignalSent    map[QuicDbusSignalType]time.Time
 
 	LogPrefix string
 }
 
+func (db *DbusBase) Init() {
+	db.SignalMinInterval = make(map[QuicDbusSignalType]time.Duration)
+	db.lastSignalSent = make(map[QuicDbusSignalType]time.Time)
+}
+
+func (db *DbusBase) SetMinIntervalForAllSignals(interval time.Duration) {
+	db.SignalMinInterval[Rtt] = interval
+	db.SignalMinInterval[Lost] = interval
+	db.SignalMinInterval[Cwnd] = interval
+	db.SignalMinInterval[Pacing] = interval
+	db.SignalMinInterval[BbrRtt] = interval
+	db.SignalMinInterval[BbrBW] = interval
+	db.SignalMinInterval[Delivered] = interval
+	db.SignalMinInterval[DeliveredAdjust] = interval
+	db.SignalMinInterval[GainLost] = interval
+}
+
+func (db *DbusBase) ShouldSendSignal(s DbusSignal) bool {
+	t := s.SignalType()
+	interval, ok := db.SignalMinInterval[t]
+	if !ok {
+		// no min interval is set
+		return true
+	}
+	lastSignalTime, ok := db.lastSignalSent[t]
+	now := time.Now()
+	if !ok || now.Sub(lastSignalTime) > interval {
+		db.lastSignalSent[t] = now
+		return true
+	} else {
+		return false
+	}
+}
+
 func (db *DbusBase) Send(s DbusSignal) {
-	db.Log("send signal %s (%+v)", s.Name(), s.Values())
+	// db.Log("send signal %s (%+v)", s.Name(), s.Values())
 	if err := db.Conn.Emit(db.ObjectPath, db.InterfaceName+"."+s.Name(), s.Values()...); err != nil {
 		panic(err)
 	}
@@ -58,11 +95,11 @@ func (db *DbusBase) registerMethods() {
 
 func (db *DbusBase) registerSignalListeners() {
 	if err := db.Conn.AddMatchSignal(
-		db.SignalMatchOptions...
-		// dbus.WithMatchObjectPath(db.ObjectPath),
-		// dbus.WithMatchInterface(db.InterfaceName),
-		// dbus.WithMatchMember("mysignal"),
-		// dbus.WithMatchSender(REMOTE_SERVICE_NAME),
+		db.SignalMatchOptions...,
+	// dbus.WithMatchObjectPath(db.ObjectPath),
+	// dbus.WithMatchInterface(db.InterfaceName),
+	// dbus.WithMatchMember("mysignal"),
+	// dbus.WithMatchSender(REMOTE_SERVICE_NAME),
 	); err != nil {
 		panic(err)
 	}
@@ -78,9 +115,9 @@ func (db *DbusBase) registerIntrospectMethod() {
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			{
-				Name:       db.InterfaceName,
-				Methods:    introspect.Methods(db.ExportedMethods),
-				Signals:    db.ExportedSignals,
+				Name:    db.InterfaceName,
+				Methods: introspect.Methods(db.ExportedMethods),
+				Signals: db.ExportedSignals,
 			},
 		},
 	}

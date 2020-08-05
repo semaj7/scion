@@ -1,23 +1,25 @@
 package main
 
 import (
-	"time"
+	"crypto/tls"
+	"flag"
+	"fmt"
+	"io"
 	"net"
 	"os"
-	"fmt"
-	"flag"
-	"crypto/tls"
-	
+	"time"
+
 	"github.com/lucas-clemente/quic-go"
 )
 
 var (
-	tlsConfig tls.Config
-	listenAddr = flag.String("ip", "127.0.0.1", "IP address to listen on")
-	listenPort = flag.Int("port", 5500, "Port number to listen on")
+	tlsConfig    tls.Config
+	listenAddr   = flag.String("ip", "127.0.0.1", "IP address to listen on")
+	listenPort   = flag.Int("port", 5500, "Port number to listen on")
 	nConnections = flag.Int("num", 12, "Number of QUIC connections using increasing port numbers")
-	keyPath = flag.String("key", "go/flowtele/tls.key", "TLS key file")
-	pemPath = flag.String("pem", "go/flowtele/tls.pem", "TLS certificate file")
+	keyPath      = flag.String("key", "go/flowtele/tls.key", "TLS key file")
+	pemPath      = flag.String("pem", "go/flowtele/tls.pem", "TLS certificate file")
+	messageSize  = flag.Int("message-size", 10000000, "size of the message that should be received as a whole")
 )
 
 // create certificate and key with
@@ -61,12 +63,12 @@ func startListener(addr *net.UDPAddr) error {
 	} else {
 		fmt.Printf("Accepted stream %d\n", stream.StreamID)
 	}
-	message := make([]byte, 1000000)
+	message := make([]byte, *messageSize)
 	tInit := time.Now()
 	nTot := 0
 	for {
 		tStart := time.Now()
-		n, err := stream.Read(message)
+		n, err := io.ReadFull(stream, message)
 		if err != nil {
 			fmt.Printf("Error reading message: %s\n", err)
 			return err
@@ -76,9 +78,9 @@ func startListener(addr *net.UDPAddr) error {
 		tCur := tEnd.Sub(tStart).Seconds()
 		tTot := tEnd.Sub(tInit).Seconds()
 		// MBit/s
-		curRate := float64(n)/tCur/1000000.0*8.0
-		totRate := float64(nTot)/tTot/1000000.0*8.0
-		fmt.Printf("%d cur: %.1fMBit/s [%.2fs], tot: %.1fMBit/s [%.2fs]\n", addr.Port, curRate, tCur, totRate, tTot)
+		curRate := float64(n) / tCur / 1000000.0 * 8.0
+		totRate := float64(nTot) / tTot / 1000000.0 * 8.0
+		fmt.Printf("%d cur: %.1fMBit/s (%.1fMB in %.2fs), tot: %.1fMBit/s (%.1fMB in %.2fs)\n", addr.Port, curRate, float64(n)/1000000, tCur, totRate, float64(nTot)/1000000, tTot)
 	}
 	return nil
 }
@@ -86,13 +88,13 @@ func startListener(addr *net.UDPAddr) error {
 func main() {
 	flag.Parse()
 	initTlsCert()
-    errs := make(chan error)
+	errs := make(chan error)
 	for i := 0; i < *nConnections; i++ {
 		go func(port int) {
 			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}); err != nil {
 				errs <- err
 			}
-		}(*listenPort+i)
+		}(*listenPort + i)
 	}
 	select {
 	case err := <-errs:
@@ -100,5 +102,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-
