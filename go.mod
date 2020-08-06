@@ -1,28 +1,35 @@
 module github.com/scionproto/scion
 
-replace github.com/lucas-clemente/quic-go => /home/cyrill/go/src/github.com/lucas-clemente/quic-go
+replace github.com/lucas-clemente/quic-go => /home/james/go/src/github.com/lucas-clemente/quic-go
 
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/antlr/antlr4 v0.0.0-20181218183524-be58ebffde8e
+	github.com/bifurcation/mint v0.0.0-20200214151656-93c820e81448 // indirect
 	github.com/buildkite/go-buildkite v2.2.1-0.20190413010238-568b6651b687+incompatible
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
-	github.com/cheekybits/genny v0.0.0-20170328200008-9127e812e1e9 // indirect
+	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/cloudflare/sidh v0.0.0-20181111220428-fc8e6378752b // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/dchest/cmac v0.0.0-20150527144652-62ff55a1048c
-	github.com/godbus/dbus v4.1.0+incompatible // indirect
+	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/godbus/dbus/v5 v5.0.3
 	github.com/golang/mock v1.2.1-0.20190329180013-73dc87cad333
 	github.com/google/go-cmp v0.3.0
 	github.com/google/go-querystring v1.0.1-0.20190318165438-c8c88dbee036 // indirect
 	github.com/google/gopacket v1.1.16-0.20190123011826-102d5ca2098c
+	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/iancoleman/strcase v0.0.0-20190422225806-e506e3ef7365
 	github.com/inconshreveable/log15 v0.0.0-20161013181240-944cbfb97b44
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/kormat/fmt15 v0.0.0-20181112140556-ee69fecb2656
-	github.com/lucas-clemente/quic-go v0.7.1-0.20190212114006-fd7246d7ed6e
-	github.com/marten-seemann/qtls v0.0.0-20190207043627-591c71538704 // indirect
+	github.com/lucas-clemente/aes12 v0.0.0-20171027163421-cd47fb39b79f // indirect
+	github.com/lucas-clemente/fnv128a v0.0.0-20160504152609-393af48d3916 // indirect
+	github.com/lucas-clemente/quic-clients v0.1.0 // indirect
+	github.com/lucas-clemente/quic-go v0.7.0
+	github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced // indirect
+	github.com/marten-seemann/qpack v0.1.0 // indirect
+	github.com/marten-seemann/qtls v0.3.2 // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.8
 	github.com/mattn/go-sqlite3 v1.9.1-0.20180719091609-b3511bfdd742
@@ -48,6 +55,7 @@ require (
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 	golang.org/x/net v0.0.0-20191105084925-a882066a44e0
 	golang.org/x/tools v0.0.0-20191029041327-9cc4af7d6b2c
+	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0-20170531160350-a96e63847dc3
 	gopkg.in/restruct.v1 v1.0.0-20151213023948-80ede2e57cc2
 	gopkg.in/yaml.v2 v2.2.4

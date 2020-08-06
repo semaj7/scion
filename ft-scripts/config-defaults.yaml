@@ -1,0 +1,168 @@
+# This file gives the config defaults for all experiments.
+
+#============================================
+
+# RTT Experiment
+# These parameters are the ones that are designed t be changed. there are others, hardcoded in the script
+
+local_test: True  # For testing the RTT script locally, with iperf -c 127.0.0.1
+rtt_experiment_time: 10  # Clients send for this many seconds
+genfolder: /etc/scion/gen/ # Used to find neighbors / findtopo
+
+neighbors_file: neighbors.txt
+processes_file: processes.txt
+perf_record_file: temp.perf.data
+perf_dump_file: perf.log
+parsed_destination: perf.csv
+iperf_log: iperf_output.log
+
+rtt_hosts:
+    scionlab-1007-rtt: 122.248.221.20
+    scionlab-1004-rtt: 3.12.159.15
+    scionlab-1102-rtt: 129.132.121.187
+
+iperf_port_start: 49152
+iperf_port_end: 65535
+#=============================================
+
+# Flowtele experiment
+name: default_experiment
+
+# Source locations
+valloc_python_command: "pyhton2"
+valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
+
+athena_python_command: "pyhton2"
+atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m10.py'
+
+ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
+
+quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/quic_listener.go'
+quic_sender_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
+
+print_to_console: True
+
+tshark_suffix: '_tshark.log'
+fshaper_suffix: '_fshaper.log'
+quicrecv_suffix: '_quicrecv.log'
+
+# Resultfile Locations
+# Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect
+result_dir:
+tshark_dump:
+fshaper_log:
+
+
+tshark_net_interface: 'lo'
+
+this_hostname: default_host
+
+hosts:
+    scionlab-1007-rtt:
+        ip: 122.248.221.20
+        scionaddr: 16-ffaa:0:1007,[172.31.27.114]
+        location: Singapore
+    scionlab-1004-rtt:
+        ip: 3.12.159.15
+        scionaddr: 16-ffaa:0:1004,[172.31.2.128]
+        location: Ohio
+    scionlab-1102-rtt:
+        ip: 129.132.121.187
+        scionaddr: 17-ffaa:0:1102,[129.132.121.187]
+        location: CAB
+
+hostname_label_map:
+    scionlab-1007-rtt: h1
+    scionlab-1004-rtt: h2
+    scionlab-1102-rtt: m
+    james-linux-host: tester
+
+label_role_map:
+    h1: receiver
+    h2: receiver
+    m: sender
+    tester: tester
+
+# These sampling resolutions affect the measurements
+tc_queue_sample_period: 0.001
+cwind_sampling_period: 0.01
+memory_sampling_period: 0.1
+
+# Timestep size of tcpdump data. Only affects postprocessing
+plot_load_resolution: 0.1
+
+# Timing
+sender_delay_time: 2
+send_duration: 10 # In seconds
+
+# Postprocessing
+truncate_front: 2
+truncate_back: 2
+
+# If a metric is not set to be plotted, it also might not be measured at all.
+plot_loss: True
+plot_throughput: True
+plot_cwnd: False     # Automatically overridden to false if not TCP
+plot_latency: True
+plot_queue: True
+plot_memory: False
+plot_iperf_losslat: False
+
+plot_hosts: # The metrics of these hosts will be explicitly plotted (all hosts will be measured anyway)
+    - 1
+    - 2
+    - 3
+
+defaults:
+    sending_behavior:
+        protocol: tcp-cubic # Will be used if no protocol is stated
+        cc_flavour: cubic # Will be used if only 'tcp' is used
+        udp_sending_behavior: stable # Only relevant for UDP
+        tso_on: False # Only relevant for TCP
+
+supported:
+    udp_sending_behavior:
+        - stable
+        - oscillation
+    cc_flavours:
+        - cubic
+        - bbr
+        - reno
+    protocols:
+        - tcp # Will assume default cc flavour
+        - tcp-cubic
+        - tcp-bbr
+        - udp # Will assume default behavior
+        - udp-stable
+        - udp-oscillation
+        - tcp-reno
+
+send_behavior_parsing:
+    UDP: udp
+    STABLE: udp-stable
+    TCP: tcp # Will use the default TCP cc flavour
+    OSCILLATION: udp-oscillation
+    CUBIC: tcp-cubic
+    BBR: tcp-bbr
+    RENO: tcp-reno
+
+behavior_summary_mapping:
+    udp-oscillation: OSCILLATION
+    udp-stable: STABLE
+    tcp-cubic: CUBIC
+    tcp-bbr: BBR
+    tcp-reno: RENO
+
+stats_file: stats.json
+
+inferred:
+    behavior_summary:
+    bw_delay_product: # unit: number of Packets of 1514B
+    cbr_rate:
+    num_senders:
+
+
+delete_raw_dump: False  # Deletes the raw data after logparser condensed it# TODO: implement
+
+
+

@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"time"
-
 	"github.com/lucas-clemente/quic-go"
 	"github.com/scionproto/scion/go/flowtele/dbus"
 )

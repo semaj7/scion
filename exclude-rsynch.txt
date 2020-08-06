@@ -1,0 +1,7 @@
+.bazel-cache
+.git
+results
+logs
+traces
+gen
+.idea
