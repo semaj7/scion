@@ -213,32 +213,36 @@ def go_deps():
         version = "v1.1.0",
     )
     go_repository(
+        name = "com_github_godbus_dbus",
+        importpath = "github.com/godbus/dbus/v5",
+        sum = "h1:ZqHaoEF7TBzh4jzPmqVhE/5A1z9of6orkAe5uHoAeME=",
+        version = "v5.0.3",
+    )
+    go_repository(
         name = "com_github_lucas_clemente_quic_go",
         importpath = "github.com/lucas-clemente/quic-go",
-        # sum = "h1:Y07tY5Q2/7WwkwZHxYlQC4mQeD1kM6BQLk/6S64KHY4=",
-        # version = "v0.7.1-0.20190212114006-fd7246d7ed6e",
-        remote = "file:///home/cyrill/go/src/github.com/lucas-clemente/quic-go",
+        remote = "https://github.com/cyrill-k/quic-go",
         vcs = "git",
         commit = "705a5411f8b82208ef911cbb2a3f75991f6ee272",
     )
     go_repository(
         name = "com_github_lucas_clemente_fnv128a",
         importpath = "github.com/lucas-clemente/fnv128a",
-        remote = "file:///home/cyrill/go/src/github.com/lucas-clemente/fnv128a",
+        remote = "https://github.com/lucas-clemente/fnv128a",
         vcs = "git",
         commit = "393af48d391698c6ae4219566bfbdfef67269997",
     )
     go_repository(
         name = "com_github_lucas_clemente_aes12",
         importpath = "github.com/lucas-clemente/aes12",
-        remote = "file:///home/cyrill/go/src/github.com/lucas-clemente/aes12",
+        remote = "https://github.com/lucas-clemente/aes12",
         vcs = "git",
         commit = "cd47fb39b79f867c6e4e5cd39cf7abd799f71670",
     )
     go_repository(
         name = "com_github_lucas_clemente_quic_go_certificates",
         importpath = "github.com/lucas-clemente/quic-go-certificates",
-        remote = "file:///home/cyrill/go/src/github.com/lucas-clemente/quic-go-certificates",
+        remote = "https://github.com/lucas-clemente/quic-go-certificates",
         vcs = "git",
         commit = "d2f86524cced5186554df90d92529757d22c1cb6",
     )
