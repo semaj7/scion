@@ -20,7 +20,7 @@ go_download_sdk(
     },
 )
 
-go_register_toolchains(nogo = "@//:nogo")
+# go_register_toolchains(nogo = "@//:nogo")
 
 # Gazelle
 http_archive(
