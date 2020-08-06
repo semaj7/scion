@@ -69,7 +69,7 @@ func (db *DbusBase) Send(s DbusSignal) {
 
 func (db *DbusBase) OpenSessionBus() {
 	var err error
-	db.Conn, err = dbus.ConnectSessionBus()
+	db.Conn, err = dbus.SessionBus()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
 		os.Exit(1)
