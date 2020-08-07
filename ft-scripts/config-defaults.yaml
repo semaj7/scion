@@ -9,6 +9,8 @@ local_test: True  # For testing the RTT script locally, with iperf -c 127.0.0.1
 rtt_experiment_time: 10  # Clients send for this many seconds
 genfolder: /etc/scion/gen/ # Used to find neighbors / findtopo
 
+rtt_measurement_interface: lo  # Will not be used if 'local_test'= True
+
 neighbors_file: neighbors.txt
 processes_file: processes.txt
 perf_record_file: temp.perf.data

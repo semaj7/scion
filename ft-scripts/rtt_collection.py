@@ -173,12 +173,23 @@ def start_srtt_collector():
     add_pid_tofile(proc)
     return
 
+# Set TSO. Needed so iperf can choose MTU/MSS
+def set_tso(on_bool):
+    mode = "on" if on_bool else "off"
+    if config['local_test']:
+        interface = "lo"
+    else:
+        interface = config['rtt_measurement_interface']
+
+    command ="sudo ethtool --offload " + interface + " tso " + mode
+    subprocess.call(command.split())
+    print("TSO Set to " + mode)
+
 # Starts the clients with a fixed experiment length.
 # TODO: parametrize the experiment length. Use a config file, preferably the same as with the rest of experiments
 def start_clients(neighbors):
     client_procs = []
     client_files = []
-
     for neigh_ip, port in neighbors:
 
         # Use this one with the port specification for local testing (when IP is the same)
@@ -203,7 +214,7 @@ def sensorstart():
 def load_accessable_neighbors():
     if config['local_test']:
         print("SETTING: LOCAL TEST")
-        return ['127.0.0.1', '5001']
+        return [['127.0.0.1', '5001']]
 
     if (not os.path.exists(config['neighbors_file'])):
         print("ERROR: Can not start clients. No neighbors file. Run '" + NEIGHBORS_COMMAND + "' first.")
@@ -232,11 +243,16 @@ def load_accessable_neighbors():
     return neighbors
 
 def run_experiment():
+    print("Running experiment.")
     neighbors = load_accessable_neighbors()
+    set_tso(False)
     print("Starting clients..")
     client_procs, client_files = start_clients(neighbors)
+    print("Experiment now runs for: ", config['rtt_experiment_time'], " seconds.")
     time.sleep(config['rtt_experiment_time'])
     stop_clients(client_procs, client_files)
+    set_tso(True)
+    print("Experiment Done.")
 
 def stop_clients(client_procs, client_files):
     # Iperf clients
@@ -249,6 +265,8 @@ def stop_clients(client_procs, client_files):
 
 # TODO: This is probably not very safe yet, Anyone could change the pid file.
 def kill_all():
+    set_tso(True)
+
     if (not os.path.exists(config['processes_file'])):
         print("No Process file stored. Nothing to kill.")
         return
@@ -259,7 +277,7 @@ def kill_all():
     for pid in pids:
         print("Killing ", str(pid))
         os.system('sudo kill ' + pid)
-    os.system("pkill iperf")
+    os.system("pkill iperf3")
     os.system("pkill perf")
 
 # Preprocess results, from record format to report
@@ -322,6 +340,7 @@ def parse_results():
     print("Saving parsed file in ", config['parsed_destination'])
 
 def clean():
+    set_tso(True)
     kill_all()
     os.system('rm ' + config['perf_record_file'])
     os.system('rm ' +  config['neighbors_file'])
