@@ -69,7 +69,7 @@ func getQuicListener(lAddr *net.UDPAddr) (quic.Listener, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Unable to initialize SCION network (%s)", err)
 		}
-		if err = squic.Init("", ""); err != nil {
+		if err = squic.Init(*keyPath, *pemPath); err != nil {
 			return nil, fmt.Errorf("Unable to load TLS server certificates: %s", err)
 		}
 		return squic.Listen(network, lAddr, addr.SvcNone, quicConfig)
