@@ -161,7 +161,7 @@ def start_servers():
         print("Execute: ", cmd.split())
         with open("iperf_server_" + str(port) + ".log", 'w') as f:
             proc = subprocess.Popen(cmd.split(), stdout=f, preexec_fn=os.setsid)
-        add_pid_tofile(proc)
+        #add_pid_tofile(proc)
     return
 
 # Start a process that collets srtt with iperf
@@ -170,7 +170,7 @@ def start_servers():
 def start_srtt_collector():
     cmd = "sudo perf record -e tcp:tcp_probe -o " +  config['perf_record_file'] +  " -T"# --filter dport==5002"
     proc = subprocess.Popen(cmd.split(" "), preexec_fn=os.setsid)
-    add_pid_tofile(proc)
+    #add_pid_tofile(proc)
     return
 
 # Set TSO. Needed so iperf can choose MTU/MSS
@@ -201,7 +201,7 @@ def start_clients(neighbors):
         f = open("iperf_client_" + str(port) + ".log", 'w')
 
         proc = subprocess.Popen(cmd.split(), stdout=f, preexec_fn=os.setsid)
-        add_pid_tofile(proc)
+        #add_pid_tofile(proc)
         client_procs.append(proc)
     return client_procs, client_files
 
@@ -267,16 +267,16 @@ def stop_clients(client_procs, client_files):
 def kill_all():
     set_tso(True)
 
-    if (not os.path.exists(config['processes_file'])):
-        print("No Process file stored. Nothing to kill.")
-        return
+    # if (not os.path.exists(config['processes_file'])):
+    #     print("No Process file stored. Nothing to kill.")
+    #     return
     print("Killing all Processes...")
-    f = open(config['processes_file'], 'r')
-    pids = list(f.readlines())
-    f.close()
-    for pid in pids:
-        print("Killing ", str(pid))
-        os.system('sudo kill ' + pid)
+    # f = open(config['processes_file'], 'r')
+    # pids = list(f.readlines())
+    # f.close()
+    # for pid in pids:
+    #     print("Killing ", str(pid))
+    #     os.system('sudo kill ' + pid)
     os.system("pkill iperf3")
     os.system("pkill perf")
 
@@ -344,7 +344,7 @@ def clean():
     kill_all()
     os.system('rm ' + config['perf_record_file'])
     os.system('rm ' +  config['neighbors_file'])
-    os.system('rm ' +  config['processes_file'])
+    #os.system('rm ' +  config['processes_file'])
     #os.system('rm ' + config['perf_dump_file'])
 
 
