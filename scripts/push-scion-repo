@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+parallel-ssh -h hosts 'mkdir -p /home/cyrill/go/src/github.com/scionproto/scion/'
+parallel-rsync -h hosts -r -x "--exclude .git" /home/cyrill/go/src/github.com/scionproto/scion /home/cyrill/go/src/github.com/scionproto/
