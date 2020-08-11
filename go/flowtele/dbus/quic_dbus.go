@@ -20,7 +20,7 @@ type quicDbusMethodInterface struct {
 	quicDbus *QuicDbus
 }
 
-func (qdbmi quicDbusMethodInterface) ApplyControl(dType uint32, beta float64, cwnd_adjust int16, cwnd_max_adjust int16, use_conservative_allocation bool) (ret bool, dbusError *dbus.Error) {
+func (qdbmi quicDbusMethodInterface) ApplyControl(dType uint32, beta float64, cwnd_adjust int64, cwnd_max_adjust int64, use_conservative_allocation bool) (ret bool, dbusError *dbus.Error) {
 	start := time.Now()
 	qdb := qdbmi.quicDbus
 	session := qdb.Session
@@ -58,8 +58,8 @@ func NewQuicDbus(flowId int32, applyControl bool) *QuicDbus {
 	d.ExportedMethods = quicDbusMethodInterface{quicDbus: &d}
 	d.SignalMatchOptions = []dbus.MatchOption{}
 	d.ExportedSignals = allQuicDbusSignals()
-	d.lastLogTime = make(map[QuicDbusSignalType]time.Time)
-	d.logMessagesSkipped = make(map[QuicDbusSignalType]uint64)
+	d.LogSignals = true
+	d.SetLogMinIntervalForAllSignals(time.Second)
 	return &d
 }
 

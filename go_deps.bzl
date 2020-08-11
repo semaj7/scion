@@ -223,7 +223,7 @@ def go_deps():
         importpath = "github.com/lucas-clemente/quic-go",
         remote = "https://github.com/cyrill-k/quic-go",
         vcs = "git",
-        commit = "d08edb719e317da207b3771f89926a8c94aa8493",
+        commit = "7743ba5fdf65a0bb6d0d3f4b24777d2701117f8b",
     )
     go_repository(
         name = "com_github_marten_seemann_qtls",

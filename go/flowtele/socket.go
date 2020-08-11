@@ -32,10 +32,13 @@ var (
 	quicDbusIndex  = flag.Int("quic-dbus-index", 0, "index of the quic sender dbus name")
 	nConnections   = flag.Int("num", 2, "Number of QUIC connections (only used in combination with --fshaper-only to restrict the number of quic flows to less than 10)")
 	noApplyControl = flag.Bool("no-apply-control", false, "Do not forward apply-control calls from fshaper to this QUIC connection (useful to ensure the calibrator flow is not influenced by vAlloc)")
+	mode           = flag.String("mode", "fetch", "the sockets mode of operation: fetch, quic, fshaper")
 
-	useScion       = flag.Bool("scion", false, "Open scion quic sockets")
-	dispatcherFlag = flag.String("dispatcher", "", "Path to dispatcher socket")
-	sciondAddrFlag = flag.String("sciond", sd.DefaultSCIONDAddress, "SCIOND address")
+	useScion        = flag.Bool("scion", false, "Open scion quic sockets")
+	dispatcherFlag  = flag.String("dispatcher", "", "Path to dispatcher socket")
+	sciondAddrFlag  = flag.String("sciond", sd.DefaultSCIONDAddress, "SCIOND address")
+	scionPathsFile  = flag.String("paths-file", "", "File containing a list of SCION paths to the destination")
+	scionPathsIndex = flag.Int("paths-index", 0, "Index of the path to use in the --paths-file")
 )
 
 func init() {
@@ -61,7 +64,7 @@ func main() {
 	// bazel build //... && bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket --quic-sender-only --scion --sciond 127.0.0.19:30255 --local-ip 127.0.0.1 --local-port 6000 --ip 127.0.0.1 --port 5500 --local-ia 1-ff00:0:111 --remote-ia 1-ff00:0:110 --path 1-ff00:0:111,1-ff00:0:110
 	// bazel build //... && bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket --quic-sender-only --scion --sciond 127.0.0.19:30255 --local-ip 127.0.0.1 --local-port 6001 --ip 127.0.0.1 --port 5501 --local-ia 1-ff00:0:111 --remote-ia 1-ff00:0:110 --path 1-ff00:0:111,1-ff00:0:110
 
-	if *quicSenderOnly {
+	if *quicSenderOnly || *mode == "quic" {
 		// start QUIC instances
 		// TODO(cyrill) read flow specs from config/user_X.json
 		remoteIp := net.ParseIP(*remoteIpFlag)
@@ -71,9 +74,10 @@ func main() {
 			fmt.Printf("Error encountered (%s), stopping all QUIC senders and SCION socket\n", err)
 			os.Exit(1)
 		}
-	} else if *fshaperOnly {
+	} else if *fshaperOnly || *mode == "fshaper" {
 		fdbus := flowteledbus.NewFshaperDbus(*nConnections)
 
+		// if a min interval for the fshaper is specified, make sure to accumulate acked bytes that would otherwise not be registered by athena
 		// fdbus.SetMinIntervalForAllSignals(5 * time.Millisecond)
 
 		// dbus setup
@@ -99,6 +103,17 @@ func main() {
 		}()
 
 		select {}
+	} else if *mode == "fetch" {
+		sciondAddr := *sciondAddrFlag
+		localIA := localIAFlag
+		remoteIA := remoteIAFlag
+		paths, err := fetchPaths(sciondAddr, localIA, remoteIA)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", err)
+		}
+		for _, path := range paths {
+			fmt.Println(NewScionPathDescription(path).String())
+		}
 	} else {
 		fmt.Fprintf(os.Stderr, "Must provide either --quic-sender-only or --fshaper-only:\n")
 
@@ -106,7 +121,7 @@ func main() {
 	}
 }
 
-func fetchPath(pathDescription *scionPathDescription, sciondAddr string, localIA addr.IA, remoteIA addr.IA) (snet.Path, error) {
+func fetchPaths(sciondAddr string, localIA addr.IA, remoteIA addr.IA) ([]snet.Path, error) {
 	sdConn, err := sd.NewService(sciondAddr).Connect(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("Unable to initialize SCION network: %s", err)
@@ -114,6 +129,14 @@ func fetchPath(pathDescription *scionPathDescription, sciondAddr string, localIA
 	paths, err := sdConn.Paths(context.Background(), remoteIA, localIA, sd.PathReqFlags{})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to lookup paths: %s", err)
+	}
+	return paths, nil
+}
+
+func fetchPath(pathDescription *scionPathDescription, sciondAddr string, localIA addr.IA, remoteIA addr.IA) (snet.Path, error) {
+	paths, err := fetchPaths(sciondAddr, localIA, remoteIA)
+	if err != nil {
+		return nil, err
 	}
 	for _, path := range paths {
 		if pathDescription.IsEqual(NewScionPathDescription(path)) {
@@ -127,7 +150,21 @@ func establishQuicSession(remoteAddr *net.UDPAddr, tlsConfig *tls.Config, quicCo
 	if *useScion {
 		dispatcher := *dispatcherFlag
 		sciondAddr := *sciondAddrFlag
-		pathDescription := &scionPath
+		var pathDescription *scionPathDescription
+		if !scionPath.IsEmpty() {
+			pathDescription = &scionPath
+		} else if *scionPathsFile != "" {
+			pathDescriptions, err := readPaths(*scionPathsFile)
+			if err != nil {
+				return nil, fmt.Errorf("Couldn't read paths from file %s: %s", *scionPathsFile, err)
+			}
+			if *scionPathsIndex >= len(pathDescriptions) {
+				return nil, fmt.Errorf("SCION path index out of range %d >= %d", *scionPathsIndex, len(pathDescriptions))
+			}
+			pathDescription = pathDescriptions[*scionPathsIndex]
+		} else {
+			return nil, fmt.Errorf("Must specify either --path or --paths-file and --paths-index")
+		}
 		localIA := localIAFlag
 		remoteIA := remoteIAFlag
 		localIp := net.ParseIP(*localIpFlag)
@@ -188,7 +225,6 @@ func startQuicSender(remoteAddr *net.UDPAddr, flowId int32, applyControl bool) e
 		}
 		signal := flowteledbus.CreateQuicDbusSignalRtt(flowId, t, uint32(srtt.Microseconds()))
 		if qdbus.ShouldSendSignal(signal) {
-			// qdbus.LogRtt(t, srtt)
 			qdbus.Send(signal)
 		}
 	}
@@ -198,7 +234,6 @@ func startQuicSender(remoteAddr *net.UDPAddr, flowId int32, applyControl bool) e
 		}
 		signal := flowteledbus.CreateQuicDbusSignalLost(flowId, t, uint32(newSlowStartThreshold))
 		if qdbus.ShouldSendSignal(signal) {
-			qdbus.LogLost(t, newSlowStartThreshold)
 			qdbus.Send(signal)
 		}
 	}
@@ -212,10 +247,11 @@ func startQuicSender(remoteAddr *net.UDPAddr, flowId int32, applyControl bool) e
 		if ackedBytes > math.MaxUint32 {
 			panic("ackedBytes does not fit in uint32")
 		}
-		signal := flowteledbus.CreateQuicDbusSignalCwnd(flowId, t, uint32(congestionWindow), int32(packetsInFlight), uint32(ackedBytes))
+		ackedBytesSum := qdbus.Acked(uint32(ackedBytes))
+		signal := flowteledbus.CreateQuicDbusSignalCwnd(flowId, t, uint32(congestionWindow), int32(packetsInFlight), ackedBytesSum)
 		if qdbus.ShouldSendSignal(signal) {
-			qdbus.LogAcked(t, congestionWindow, packetsInFlight, ackedBytes)
 			qdbus.Send(signal)
+			qdbus.ResetAcked()
 		}
 	}
 

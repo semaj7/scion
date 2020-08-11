@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -15,7 +17,16 @@ type scionPathDescription struct {
 	IDList []common.IFIDType
 }
 
+func (spd *scionPathDescription) IsEmpty() bool {
+	return (spd.IAList == nil && spd.IDList == nil) || len(spd.IAList) == 0 && len(spd.IDList) == 0
+}
+
 func (spd *scionPathDescription) Set(input string) error {
+	if input == "" {
+		spd.IAList = make([]addr.IA, 0)
+		spd.IDList = make([]common.IFIDType, 0)
+		return nil
+	}
 	isdasidList := strings.Split(input, ">")
 	spd.IAList = make([]addr.IA, 2*(len(isdasidList)-1))
 	spd.IDList = make([]common.IFIDType, 2*(len(isdasidList)-1))
@@ -63,15 +74,22 @@ func (spd *scionPathDescription) Set(input string) error {
 }
 
 func (spd *scionPathDescription) String() string {
-	var sb strings.Builder
-	for i, ia := range spd.IAList {
-		if i > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(ia.String())
-		sb.WriteString(" ")
-		sb.WriteString(spd.IDList[i].String())
+	if len(spd.IAList) < 2 {
+		return "<Empty SCION path description>"
 	}
+	var sb strings.Builder
+	for i := 0; i < len(spd.IAList); i++ {
+		if i%2 == 0 {
+			sb.WriteString(spd.IAList[i].String())
+			sb.WriteString(" ")
+			sb.WriteString(spd.IDList[i].String())
+		} else {
+			sb.WriteString(">")
+			sb.WriteString(spd.IDList[i].String())
+			sb.WriteString(" ")
+		}
+	}
+	sb.WriteString(spd.IAList[len(spd.IAList)-1].String())
 	return sb.String()
 }
 
@@ -96,4 +114,23 @@ func NewScionPathDescription(p snet.Path) *scionPathDescription {
 		spd.IDList[i] = ifs.ID()
 	}
 	return &spd
+}
+
+func readPaths(pathsFile string) ([]*scionPathDescription, error) {
+	f, err := os.Open(pathsFile)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	spds := make([]*scionPathDescription, 0)
+	for scanner.Scan() {
+		var spd scionPathDescription
+		spd.Set(scanner.Text())
+		spds = append(spds, &spd)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return spds, nil
 }

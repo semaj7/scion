@@ -3,6 +3,7 @@ package flowteledbus
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/godbus/dbus"
@@ -23,12 +24,36 @@ type DbusBase struct {
 	SignalMinInterval map[QuicDbusSignalType]time.Duration
 	lastSignalSent    map[QuicDbusSignalType]time.Time
 
+	ackedBytesMutex sync.Mutex
+	ackedBytes      uint32
+
+	LogSignals           bool
+	SignalLogMinInterval map[QuicDbusSignalType]time.Duration
+	lastSignalLogged     map[QuicDbusSignalType]time.Time
+	logMessagesSkipped   map[QuicDbusSignalType]uint64
+
 	LogPrefix string
 }
 
 func (db *DbusBase) Init() {
 	db.SignalMinInterval = make(map[QuicDbusSignalType]time.Duration)
 	db.lastSignalSent = make(map[QuicDbusSignalType]time.Time)
+	db.SignalLogMinInterval = make(map[QuicDbusSignalType]time.Duration)
+	db.lastSignalLogged = make(map[QuicDbusSignalType]time.Time)
+	db.logMessagesSkipped = make(map[QuicDbusSignalType]uint64)
+}
+
+func (db *DbusBase) Acked(ackedBytes uint32) uint32 {
+	db.ackedBytesMutex.Lock()
+	defer db.ackedBytesMutex.Unlock()
+	db.ackedBytes += ackedBytes
+	return db.ackedBytes
+}
+
+func (db *DbusBase) ResetAcked() {
+	db.ackedBytesMutex.Lock()
+	defer db.ackedBytesMutex.Unlock()
+	db.ackedBytes = 0
 }
 
 func (db *DbusBase) SetMinIntervalForAllSignals(interval time.Duration) {
@@ -41,6 +66,18 @@ func (db *DbusBase) SetMinIntervalForAllSignals(interval time.Duration) {
 	db.SignalMinInterval[Delivered] = interval
 	db.SignalMinInterval[DeliveredAdjust] = interval
 	db.SignalMinInterval[GainLost] = interval
+}
+
+func (db *DbusBase) SetLogMinIntervalForAllSignals(interval time.Duration) {
+	db.SignalLogMinInterval[Rtt] = interval
+	db.SignalLogMinInterval[Lost] = interval
+	db.SignalLogMinInterval[Cwnd] = interval
+	db.SignalLogMinInterval[Pacing] = interval
+	db.SignalLogMinInterval[BbrRtt] = interval
+	db.SignalLogMinInterval[BbrBW] = interval
+	db.SignalLogMinInterval[Delivered] = interval
+	db.SignalLogMinInterval[DeliveredAdjust] = interval
+	db.SignalLogMinInterval[GainLost] = interval
 }
 
 func (db *DbusBase) ShouldSendSignal(s DbusSignal) bool {
@@ -61,7 +98,40 @@ func (db *DbusBase) ShouldSendSignal(s DbusSignal) bool {
 }
 
 func (db *DbusBase) Send(s DbusSignal) {
-	// db.Log("send signal %s (%+v)", s.Name(), s.Values())
+	var logSignal bool
+	if db.LogSignals {
+		t := s.SignalType()
+		interval, ok := db.SignalLogMinInterval[t]
+		if !ok {
+			// no min interval is set
+			logSignal = true
+		} else {
+			lastSignalLogTime, ok := db.lastSignalLogged[t]
+			now := time.Now()
+			if !ok || now.Sub(lastSignalLogTime) > interval {
+				db.lastSignalLogged[t] = now
+				logSignal = true
+			} else {
+				// skip this log message and increase skipped counter
+				db.logMessagesSkipped[t] += 1
+			}
+		}
+		if logSignal {
+			nSkipped := uint64(0)
+			if val2, ok2 := db.logMessagesSkipped[t]; ok2 {
+				nSkipped = val2
+			}
+			switch t {
+			case Rtt:
+				db.Log("RTT (skipped %d) srtt = %.1fms", nSkipped, float32(s.Values()[3].(uint32))/1000)
+			case Lost:
+				db.Log("Lost (skipped %d) ssthresh = %d", nSkipped, s.Values()[3])
+			case Cwnd:
+				db.Log("Cwnd (skipped %d) cwnd = %d, inflight = %d, acked = %d", nSkipped, s.Values()[3], s.Values()[4], s.Values()[5])
+			}
+			db.logMessagesSkipped[t] = 0
+		}
+	}
 	if err := db.Conn.Emit(db.ObjectPath, db.InterfaceName+"."+s.Name(), s.Values()...); err != nil {
 		panic(err)
 	}
