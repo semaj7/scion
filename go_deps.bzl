@@ -235,35 +235,7 @@ def go_deps():
         importpath = "github.com/lucas-clemente/quic-go",
         remote = "https://github.com/cyrill-k/quic-go",
         vcs = "git",
-        commit = "705a5411f8b82208ef911cbb2a3f75991f6ee272",
-    )
-    go_repository(
-        name = "com_github_lucas_clemente_fnv128a",
-        importpath = "github.com/lucas-clemente/fnv128a",
-        remote = "https://github.com/lucas-clemente/fnv128a",
-        vcs = "git",
-        commit = "393af48d391698c6ae4219566bfbdfef67269997",
-    )
-    go_repository(
-        name = "com_github_lucas_clemente_aes12",
-        importpath = "github.com/lucas-clemente/aes12",
-        remote = "https://github.com/lucas-clemente/aes12",
-        vcs = "git",
-        commit = "cd47fb39b79f867c6e4e5cd39cf7abd799f71670",
-    )
-    go_repository(
-        name = "com_github_lucas_clemente_quic_go_certificates",
-        importpath = "github.com/lucas-clemente/quic-go-certificates",
-        remote = "https://github.com/lucas-clemente/quic-go-certificates",
-        vcs = "git",
-        commit = "d2f86524cced5186554df90d92529757d22c1cb6",
-    )
-    go_repository(
-        name = "com_github_hashicorp_golang_lru",
-        importpath = "github.com/hashicorp/golang-lru",
-        vcs = "git",
-        commit = "eb529947af531eb529020ba979a7a887338904d1",
-        remote = "https://github.com/hashicorp/golang-lru",
+        commit = "7743ba5fdf65a0bb6d0d3f4b24777d2701117f8b",
     )
     go_repository(
         name = "com_github_marten_seemann_qtls",

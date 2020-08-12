@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	tlsConfig tls.Config
-	localIA   addr.IA
+	tlsConfig   tls.Config
+	localIAFlag addr.IA
 
 	listenAddr   = flag.String("ip", "127.0.0.1", "IP address to listen on")
 	listenPort   = flag.Int("port", 5500, "Port number to listen on")
@@ -30,13 +30,13 @@ var (
 	pemPath      = flag.String("pem", "go/flowtele/tls.pem", "TLS certificate file")
 	messageSize  = flag.Int("message-size", 10000000, "size of the message that should be received as a whole")
 
-	useScion   = flag.Bool("scion", false, "Open scion quic sockets")
-	dispatcher = flag.String("dispatcher", "", "Path to dispatcher socket")
-	sciondAddr = flag.String("sciond", sd.DefaultSCIONDAddress, "SCIOND address")
+	useScion       = flag.Bool("scion", false, "Open scion quic sockets")
+	dispatcherFlag = flag.String("dispatcher", "", "Path to dispatcher socket")
+	sciondAddrFlag = flag.String("sciond", sd.DefaultSCIONDAddress, "SCIOND address")
 )
 
 func init() {
-	flag.Var(&localIA, "local-ia", "ISD-AS address to listen on")
+	flag.Var(&localIAFlag, "local-ia", "ISD-AS address to listen on")
 }
 
 // create certificate and key with
@@ -51,11 +51,14 @@ func initTlsCert() error {
 	return nil
 }
 
-func getQuicListener(lAddr *net.UDPAddr, useScion bool) (quic.Listener, error) {
+func getQuicListener(lAddr *net.UDPAddr) (quic.Listener, error) {
 	quicConfig := &quic.Config{IdleTimeout: time.Hour}
-	if useScion {
-		ds := reliable.NewDispatcher(*dispatcher)
-		sciondConn, err := sd.NewService(*sciondAddr).Connect(context.Background())
+	if *useScion {
+		dispatcher := *dispatcherFlag
+		sciondAddr := *sciondAddrFlag
+		localIA := localIAFlag
+		ds := reliable.NewDispatcher(dispatcher)
+		sciondConn, err := sd.NewService(sciondAddr).Connect(context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("Unable to initialize SCION network (%s)", err)
 		}
@@ -66,6 +69,9 @@ func getQuicListener(lAddr *net.UDPAddr, useScion bool) (quic.Listener, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Unable to initialize SCION network (%s)", err)
 		}
+		if err = squic.Init(*keyPath, *pemPath); err != nil {
+			return nil, fmt.Errorf("Unable to load TLS server certificates: %s", err)
+		}
 		return squic.Listen(network, lAddr, addr.SvcNone, quicConfig)
 	} else {
 		conn, err := net.ListenUDP("udp", lAddr)
@@ -73,13 +79,14 @@ func getQuicListener(lAddr *net.UDPAddr, useScion bool) (quic.Listener, error) {
 			fmt.Printf("Error starting UDP listener: %s\n", err)
 			return nil, err
 		}
+		initTlsCert()
 		// make QUIC idle timout long to allow a delay between starting the listeners and the senders
 		return quic.Listen(conn, &tlsConfig, quicConfig)
 	}
 }
 
-func startListener(lAddr *net.UDPAddr, useScion bool) error {
-	server, err := getQuicListener(lAddr, useScion)
+func startListener(lAddr *net.UDPAddr) error {
+	server, err := getQuicListener(lAddr)
 	if err != nil {
 		fmt.Printf("Error starting QUIC listener: %s\n", err)
 		return err
@@ -124,11 +131,10 @@ func startListener(lAddr *net.UDPAddr, useScion bool) error {
 
 func main() {
 	flag.Parse()
-	initTlsCert()
 	errs := make(chan error)
 	for i := 0; i < *nConnections; i++ {
 		go func(port int) {
-			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}, *useScion); err != nil {
+			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}); err != nil {
 				errs <- err
 			}
 		}(*listenPort + i)
