@@ -20,16 +20,6 @@ from ftutils import load_config
 # Wait this many seconds until starting the clients.
 CLIENT_INIT_DELAY = 2
 
-# Commands for CLI
-RUN_ALL_COMMAND = "runall"
-NEIGHBORS_COMMAND = "topo"
-SENSOR_COMMAND = 'sensor'
-SERVER_COMMAND= 'server'
-EXPERIMENT_COMMAND='run'
-KILL_COMMAND='kill'
-CLEAN_COMMAND='cleanall'
-PROCESS_COMMAND='preprocess'
-PARSE_COMMAND='parse'
 
 # Takes ip1 and ip2, and the map and returns the corresponding port.
 def get_port_from_edge(ip1, ip2, host_port_map):
@@ -186,7 +176,6 @@ def set_tso(on_bool):
     print("TSO Set to " + mode)
 
 # Starts the clients with a fixed experiment length.
-# TODO: parametrize the experiment length. Use a config file, preferably the same as with the rest of experiments
 def start_clients(neighbors):
     client_procs = []
     client_files = []
@@ -347,19 +336,18 @@ def clean():
     #os.system('rm ' +  config['processes_file'])
     #os.system('rm ' + config['perf_dump_file'])
 
-
 def exec_from_args():
     #global parser
     parser = argparse.ArgumentParser()
-    FUNCTION_MAP = {RUN_ALL_COMMAND: run_all,
-                    NEIGHBORS_COMMAND: analyse_topo,
-                    SENSOR_COMMAND: sensorstart,
-                    SERVER_COMMAND: start_servers,
-                    EXPERIMENT_COMMAND: run_experiment,
-                    KILL_COMMAND: kill_all,
-                    CLEAN_COMMAND: clean,
-                    PROCESS_COMMAND: preprocess,
-                    PARSE_COMMAND: parse_results}
+    FUNCTION_MAP = {"runall": run_all,
+                    "topo": analyse_topo,
+                    "sensor": sensorstart,
+                    "server": start_servers,
+                    "run": run_experiment,
+                    "kill": kill_all,
+                    "cleanall": clean,
+                    "preprocess": preprocess,
+                    "parse": parse_results}
     parser.add_argument('command', choices=FUNCTION_MAP.keys())
     #parser.add_argument('-t', action="store", dest="exptime", type=int, default=10)
 

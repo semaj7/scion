@@ -23,54 +23,39 @@ rtt_hosts:
     scionlab-1004-rtt: 3.12.159.15
     scionlab-1102-rtt: 129.132.121.187
 
-iperf_port_start: 49152
+iperf_port_start: 51000
 iperf_port_end: 65535
 #=============================================
 
 # Flowtele experiment
 name: default_experiment
 
-# Source locations
-valloc_python_command: "pyhton2"
-valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
 
-athena_python_command: "pyhton2"
-atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m10.py'
+# Experiment Parameters
 
-ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
+use_scion: True
+use_shaping: True
 
-quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/quic_listener.go'
-quic_sender_location: '/home/james/go/src/github.com/scionproto/scion/go/flowtele/socket.go'
-
-print_to_console: True
-
-tshark_suffix: '_tshark.log'
-fshaper_suffix: '_fshaper.log'
-quicrecv_suffix: '_quicrecv.log'
-
-# Resultfile Locations
-# Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect
-result_dir:
-tshark_dump:
-fshaper_log:
-
-
-tshark_net_interface: 'lo'
-
-this_hostname: default_host
+# Host Adresses and roles
 
 hosts:
     scionlab-1007-rtt:
         ip: 122.248.221.20
+        ia: 16-ffaa:0:1007
+        local_ip: 172.31.27.114
         scionaddr: 16-ffaa:0:1007,[172.31.27.114]
         location: Singapore
     scionlab-1004-rtt:
         ip: 3.12.159.15
+        ia: 16-ffaa:0:1004
+        local_ip: 172.31.2.128
         scionaddr: 16-ffaa:0:1004,[172.31.2.128]
         location: Ohio
     scionlab-1102-rtt:
         ip: 129.132.121.187
-        scionaddr: 17-ffaa:0:1102,[129.132.121.187]
+        ia: 17-ffaa:0:1102
+        local_ip: 129.132.121.187
+        scionaddr: 17-ffaa:0:1102,[129.132.121.187] #unused at the moment
         location: CAB
 
 hostname_label_map:
@@ -81,21 +66,53 @@ hostname_label_map:
 
 label_role_map:
     h1: receiver
-    h2: receiver
+    h2: off
     m: sender
     tester: tester
 
-# These sampling resolutions affect the measurements
-tc_queue_sample_period: 0.001
-cwind_sampling_period: 0.01
-memory_sampling_period: 0.1
 
-# Timestep size of tcpdump data. Only affects postprocessing
-plot_load_resolution: 0.1
+# Network Parameters
+
+local_port_start_range: 6000
+listener_port: 5500
+tshark_net_interface: 'lo'
+
+
+# Source locations
+
+scion_location: '/home/james/go/src/github.com/scionproto/scion'
+
+valloc_python_command: "pyhton2"
+valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
+
+athena_python_command: "pyhton3.6"
+atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m2.py'
+
+ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket'
+quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/listener/linux_amd64_stripped/flowtele_listener'
+
+print_to_console: True
+
+tshark_suffix: '_tshark.log'
+fshaper_suffix: '_fshaper.log'
+athena_suffix: '_athena.log'
+
+flow_suffix: '_flow.log'
+quicrecv_suffix: '_quicrecv.log'
+
+this_hostname: default_host
+
+# Resultfile Locations
+# Is inferred. Setting result dir and executing with flowtele-experiment.py will have no effect
+result_dir:
+tshark_dump:
+fshaper_log:
+
 
 # Timing
 sender_delay_time: 2
 send_duration: 10 # In seconds
+calibrator_duration: 2
 
 # Postprocessing
 truncate_front: 2
@@ -110,51 +127,6 @@ plot_queue: True
 plot_memory: False
 plot_iperf_losslat: False
 
-plot_hosts: # The metrics of these hosts will be explicitly plotted (all hosts will be measured anyway)
-    - 1
-    - 2
-    - 3
-
-defaults:
-    sending_behavior:
-        protocol: tcp-cubic # Will be used if no protocol is stated
-        cc_flavour: cubic # Will be used if only 'tcp' is used
-        udp_sending_behavior: stable # Only relevant for UDP
-        tso_on: False # Only relevant for TCP
-
-supported:
-    udp_sending_behavior:
-        - stable
-        - oscillation
-    cc_flavours:
-        - cubic
-        - bbr
-        - reno
-    protocols:
-        - tcp # Will assume default cc flavour
-        - tcp-cubic
-        - tcp-bbr
-        - udp # Will assume default behavior
-        - udp-stable
-        - udp-oscillation
-        - tcp-reno
-
-send_behavior_parsing:
-    UDP: udp
-    STABLE: udp-stable
-    TCP: tcp # Will use the default TCP cc flavour
-    OSCILLATION: udp-oscillation
-    CUBIC: tcp-cubic
-    BBR: tcp-bbr
-    RENO: tcp-reno
-
-behavior_summary_mapping:
-    udp-oscillation: OSCILLATION
-    udp-stable: STABLE
-    tcp-cubic: CUBIC
-    tcp-bbr: BBR
-    tcp-reno: RENO
-
 stats_file: stats.json
 
 inferred:
@@ -162,9 +134,6 @@ inferred:
     bw_delay_product: # unit: number of Packets of 1514B
     cbr_rate:
     num_senders:
-
-
-delete_raw_dump: False  # Deletes the raw data after logparser condensed it# TODO: implement
 
 
 

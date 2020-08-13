@@ -35,3 +35,13 @@ def generateResultDir(name):
     for rT in ['hostlogs/', 'hostdata/', 'condensed/']:
         os.system('mkdir -p ' + resultDir+rT)
     return resultDir
+
+
+# Example use:         receivers = load_all_hostnames(config, filter_roles=['receiver'])
+def load_all_hostnames(config, filter_roles=[]):
+    hostnames = list(config['hostname_label_map'].keys())
+    if filter_roles == []:
+        return hostnames
+    else:
+        return [hname for hname in hostnames if config['label_role_map'][hname] in filter_roles]
+
