@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+
+# parallel-ssh -h hosts 
+# parallel-rsync -h hosts -r -v -x "--exclude .git" -x "--exclude .bazel-cache" -x "-L" -x "--include bazel-bin/go/flowtele/***" -x "--include bazel-bin/go/examples/pingpong/***" -x "--include */" -x "--exclude bazel-bin/***" -x "--exclude bazel-out/***" -x "--exclude bazel-scion/***" -x "--prune-empty-dirs" /home/james/go/src/github.com/scionproto/scion /home/james/go/src/github.com/scionproto
+# # rsync -r -L --exclude .git --exclude .bazel-cache --include 'bazel-bin/go/flowtele/***' --include 'bazel-bin/go/examples/pingpong/***' --include '*/' --exclude 'bazel-bin/***' --exclude 'bazel-out/***' --exclude 'bazel-scion/***' --prune-empty-dirs /home/cyrill/go/src/github.com/scionproto/scion flowtele-ethz:/home/cyrill/go/src/github.com/scionproto/
+
+
+# parallel-ssh -h hosts 'mkdir -p /home/james/bitbucket/csl331/'
+# parallel-rsync -h hosts -r -x "--exclude .git" /home/james/bitbucket/csl331 /home/james/thesis/flowtele
+
+
+IPS=( 122.248.221.20 3.12.159.15 129.132.121.187 )
+
+for IP in "${IPS[@]}"
+do
+	echo "Folder check on $IP"
+        ssh scionlab@${IP} 'mkdir -p /home/james/go/src/github.com/scionproto/scion/'
+done
+
+for IP in "${IPS[@]}"
+do
+	echo "Starting rsync on $IP"
+	rsync -avz --exclude '.git' --exclude '.bazel-cache'  --include 'bazel-bin/go/flowtele/***' --include 'bazel-bin/go/examples/pingpong/***' --include '*/' --exclude 'bazel-bin/***' --exclude 'bazel-out/***' --exclude 'bazel-scion/***' /home/james/go/src/github.com/scionproto scionlab@${IP}:/home/james/go/src/github.com/scionproto/scion
+ done
+
+
+for IP in "${IPS[@]}"
+do
+	echo "Folder check on $IP"
+        ssh scionlab@${IP} 'mkdir -p /home/james/bitbucket/csl331/'
+done
+
+for IP in "${IPS[@]}"
+do
+	echo "Starting rsync on $IP"
+    rsync -avz --exclude '.git'  /home/james/thesis/flowtele scionlab@${IP}:/home/james/bitbucket/csl331
+done

@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python3.7
 
 #!/usr/bin/python
 
@@ -45,15 +45,6 @@ import signal
 from rtt_collection import run_all as rtt_run
 import argparse
 from ftutils import *
-
-RUN_ALL_COMMAND="run_all"
-RUN_FT_CLIENTS_COMMAND="run"
-RUN_RTT_COMMAND="rtt"
-SETUP_FT_COMMAND='setup'
-KILL_COMMAND='kill'
-RUN_ALL_FT_COMMAND='run_ft'
-GET_PATHS_COMMAND='paths'
-CALIBRATOR_COMMAND='probe'
 
 # Checks if the current host belongs to roles that should perform this command.
 # Returns 'true' if should skip
@@ -116,7 +107,7 @@ def initiateLog():
     hostlogfile = config['result_dir']+"hostlogs/%s.log" % config['this_label']
     config['hostlog'] = hostlogfile
     if os.path.exists(hostlogfile):
-        print("WARNING: this eperiment has already been run.")
+        print("WARNING: this eperiment named '" +  config['name'] +  "' has already been run.")
         answer = input("Continue? ('y' for yes)")
         if answer != "y" and answer != 'yes':
             print("Not answered with 'y'. Abort.")
@@ -218,15 +209,21 @@ def run_scion_experiment(receivers):
         # TODO: simplest heuristic, works well if only one receiver:
         #           just choose path that showed the biggest throughput in calibration phase. use it for all flows
         best_path = 12345
-        num = 1
-        # Start Clients
-        proc = start_scion_flow(best_path, recv, num)
 
+    # Start Clients
+    procs = []
+    for flownum in range(config['num_flows']):
+        proc = start_scion_flow(best_path, recv, flownum)
+        procs.append(proc)
 
 
     time.sleep(config['send_duration'])
     print("Sending for ", config['send_duration'] + " seconds..")
+
     # Stop Clients
+    for proc in procs:
+        proc.kill()
+    print("Sending finished.")
 
 # Directly invoked from CLI
 def run_ft_experiment():
@@ -269,9 +266,13 @@ def get_path(remote_name):
     local_ia = config['hosts'][config['this_hostname']]['ia']
     ftsocket_exec = config['ftsocket_location']
     remote_ia = config['hosts'][remote_name]['ia']
-    command =  ftsocket_exec + " --mode fetch --local -ia " + local_ia + " --remote -ia " + remote_ia
-    command += " > paths_" + remote_name
-    os.system(command)
+    command =  ftsocket_exec + " --mode fetch --local-ia " + local_ia + " --remote-ia " + remote_ia
+    remote_label = config['hostname_label_map'][remote_name]
+    outname = "paths_" + remote_label + ".txt"
+    execute(command, outname, False, None, False)
+    numpaths = str(subprocess.run(("wc -l " + outname).split(), capture_output=True).stdout).split(" ")[0]
+
+    print("Number of paths found: ", numpaths)
 
 # Directly invoked from CLI
 # Can be executed on every machine. Will act according to role.
@@ -290,12 +291,12 @@ def get_paths():
 def start_scion_flow(path, recv_hostname, dbusnum, additional_suffix=""):
 
     print("Starting Flow to host ", recv_hostname, " through path ", path)
-
+    thishostname = config['this_hostname']
     ft_send = config['ftsocket_location']
     recv_ip = config['hosts'][recv_hostname]['ip']
     recv_ia = config['hosts'][recv_hostname]['ia']
-    local_ip = config['hosts']['this_hostname']['ip']
-    local_ia = config['hosts']['this_hostname']['ia']
+    local_ip = config['hosts'][thishostname]['ip']
+    local_ia = config['hosts'][thishostname]['ia']
     local_port = config['local_port_start_range'] + dbusnum
     port = config['listener_port']
 
@@ -369,6 +370,7 @@ def run_calibrators():
             recv_processes = []
             pathfile ="paths_" + recv
             if not os.path.exists(pathfile):
+                print("No paths file for ", recv)
                 continue
             with open(pathfile, 'r') as f:
                 paths = f.read().split('\n')
@@ -401,14 +403,14 @@ def exec_rtt():
 def exec_from_args():
     #global parser
     parser = argparse.ArgumentParser()
-    FUNCTION_MAP = {RUN_ALL_COMMAND: run_all,
-                    RUN_ALL_FT_COMMAND: run_all_ft,
-                    RUN_FT_CLIENTS_COMMAND: run_ft_experiment,
-                    RUN_RTT_COMMAND: exec_rtt,
-                    GET_PATHS_COMMAND: get_paths,
-                    CALIBRATOR_COMMAND: run_calibrators,
-                    "ft_build":     build,
-                    "setup": setup,
+    FUNCTION_MAP = {"run_all": run_all,
+                    'runft': run_all_ft,
+                    "run": run_ft_experiment,
+                    "rtt": exec_rtt,
+                    'paths': get_paths,
+                    'probe': run_calibrators,
+                    "build": build,
+                    "setup": setup_sender,
                     "kill": kill
                     }
     parser.add_argument('command', choices=FUNCTION_MAP.keys())

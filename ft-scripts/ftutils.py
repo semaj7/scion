@@ -43,5 +43,5 @@ def load_all_hostnames(config, filter_roles=[]):
     if filter_roles == []:
         return hostnames
     else:
-        return [hname for hname in hostnames if config['label_role_map'][hname] in filter_roles]
+        return [hname for hname in hostnames if config['label_role_map'][config['hostname_label_map'][hname]] in filter_roles]
 

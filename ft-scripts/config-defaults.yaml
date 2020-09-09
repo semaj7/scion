@@ -28,13 +28,14 @@ iperf_port_end: 65535
 #=============================================
 
 # Flowtele experiment
-name: default_experiment
+name: 'default_experiment'
 
 
 # Experiment Parameters
 
 use_scion: True
 use_shaping: True
+num_flows: 2
 
 # Host Adresses and roles
 
@@ -83,10 +84,10 @@ tshark_net_interface: 'lo'
 scion_location: '/home/james/go/src/github.com/scionproto/scion'
 
 valloc_python_command: "pyhton2"
-valloc_location: '/home/james/thesis/flowtele/csl331/vAlloc/vAlloc.py'
+valloc_location: '/home/james/bitbucket/csl331/vAlloc/vAlloc.py'
 
 athena_python_command: "pyhton3.6"
-atchena_location: '/home/james/thesis/flowtele/csl331/dbus/athena_m2.py'
+atchena_location: '/home/james/bitbucket/csl331/dbus/athena_m2.py'
 
 ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket'
 quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/listener/linux_amd64_stripped/flowtele_listener'
