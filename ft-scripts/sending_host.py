@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3.7
 
 # Takes 3 arguments:
 # hostID: provide an integer X, assuming the sending hostnames are 'hX'

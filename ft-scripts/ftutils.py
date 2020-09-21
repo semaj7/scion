@@ -1,7 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3.7
 
 import yaml
 import os
+from os.path import join
 
 def load_config(config_filename="ft-scripts/config-defaults.yaml"):
     # Load Default Config
@@ -26,14 +27,14 @@ def generateUniqueResultDir(experiment_name):
     return result_dir
 
 
-def generateResultDir(name):
+def generateResultDir(name, subfolders):
     curr_path = os.getcwd()
-    resultDir = curr_path + '/results/'
+    resultDir = join(curr_path, 'results')
     #resultDir += datetime.strftime(datetime.now(), "%Y-%m-%d--%H-%M-%S") + "-"
-    resultDir += name+ '/'
+    resultDir = join(resultDir,  name)
     os.system('mkdir -p ' + resultDir)
-    for rT in ['hostlogs/', 'hostdata/', 'condensed/']:
-        os.system('mkdir -p ' + resultDir+rT)
+    for rT in subfolders:
+        os.system('mkdir -p ' + join(resultDir, rT))
     return resultDir
 
 

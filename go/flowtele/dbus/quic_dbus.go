@@ -108,16 +108,16 @@ func (qdb *QuicDbus) LogAcked(t time.Time, congestionWindow uint64, packetsInFli
 	}
 }
 
-func (qdb *QuicDbus) SendRttSignal(t time.Time, rtt uint32) {
-	qdb.Send(CreateQuicDbusSignalRtt(qdb.FlowId, t, rtt))
+func (qdb *QuicDbus) SendRttSignal(t time.Time, rtt uint32) error {
+	return qdb.Send(CreateQuicDbusSignalRtt(qdb.FlowId, t, rtt))
 }
 
-func (qdb *QuicDbus) SendLostSignal(t time.Time, newSsthresh uint32) {
-	qdb.Send(CreateQuicDbusSignalLost(qdb.FlowId, t, newSsthresh))
+func (qdb *QuicDbus) SendLostSignal(t time.Time, newSsthresh uint32) error {
+	return qdb.Send(CreateQuicDbusSignalLost(qdb.FlowId, t, newSsthresh))
 }
 
-func (qdb *QuicDbus) SendCwndSignal(t time.Time, cwnd uint32, pktsInFlight int32, ackedBytes uint32) {
-	qdb.Send(CreateQuicDbusSignalCwnd(qdb.FlowId, t, cwnd, pktsInFlight, ackedBytes))
+func (qdb *QuicDbus) SendCwndSignal(t time.Time, cwnd uint32, pktsInFlight int32, ackedBytes uint32) error {
+	return qdb.Send(CreateQuicDbusSignalCwnd(qdb.FlowId, t, cwnd, pktsInFlight, ackedBytes))
 }
 
 func getQuicServiceName(flowId int32) string {

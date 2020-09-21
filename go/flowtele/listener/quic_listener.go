@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/lucas-clemente/quic-go"
@@ -25,7 +26,8 @@ var (
 
 	listenAddr   = flag.String("ip", "127.0.0.1", "IP address to listen on")
 	listenPort   = flag.Int("port", 5500, "Port number to listen on")
-	nConnections = flag.Int("num", 12, "Number of QUIC connections using increasing port numbers")
+	nConnections = flag.Int("num", 12, "Number of QUIC connections allowed per port number")
+	portRange    = flag.Int("port-range", 1, "Number of ports (increasing from --port) that are accepting QUIC connections")
 	keyPath      = flag.String("key", "go/flowtele/tls.key", "TLS key file")
 	pemPath      = flag.String("pem", "go/flowtele/tls.pem", "TLS certificate file")
 	messageSize  = flag.Int("message-size", 10000000, "size of the message that should be received as a whole")
@@ -85,37 +87,62 @@ func getQuicListener(lAddr *net.UDPAddr) (quic.Listener, error) {
 	}
 }
 
-func startListener(lAddr *net.UDPAddr) error {
-	server, err := getQuicListener(lAddr)
-	if err != nil {
-		fmt.Printf("Error starting QUIC listener: %s\n", err)
-		return err
-	}
-	defer server.Close()
-	fmt.Printf("Listening for QUIC connections on %s\n", server.Addr().String())
-	session, err := server.Accept()
+func acceptStream(listener quic.Listener) (quic.Session, quic.Stream, error) {
+	session, err := listener.Accept()
 	if err != nil {
 		fmt.Printf("Error accepting sessions: %s\n", err)
-		return err
+		return nil, nil, err
 	} else {
 		fmt.Println("Accepted session")
 	}
 	stream, err := session.AcceptStream()
 	if err != nil {
 		fmt.Printf("Error accepting streams: %s\n", err)
-		return err
+		return nil, nil, err
 	} else {
-		fmt.Printf("Accepted stream %d\n", stream.StreamID)
+		fmt.Printf("Accepted stream %d\n", stream.StreamID())
 	}
+	return session, stream, nil
+}
+
+func getPort(addr net.Addr) (int, error) {
+	switch addr.(type) {
+	case *net.UDPAddr:
+		return addr.(*net.UDPAddr).Port, nil
+	case *snet.UDPAddr:
+		return addr.(*snet.UDPAddr).Host.Port, nil
+	default:
+		return 0, fmt.Errorf("Unknown address type")
+	}
+}
+
+func listenOnStream(session quic.Session, stream quic.Stream) error {
+	// defer stream.Close()
+	defer session.Close()
 	message := make([]byte, *messageSize)
 	tInit := time.Now()
 	nTot := 0
+	rPort, err := getPort(session.RemoteAddr())
+	if err != nil {
+		fmt.Printf("Error resolving remote UDP address: %s\n", err)
+		return err
+	}
+	lPort, err := getPort(session.LocalAddr())
+	if err != nil {
+		fmt.Printf("Error resolving local UDP address: %s\n", err)
+		return err
+	}
+	fmt.Printf("%d_%d: Listening on Stream %d\n", lPort, rPort, stream.StreamID())
 	for {
 		tStart := time.Now()
 		n, err := io.ReadFull(stream, message)
 		if err != nil {
-			fmt.Printf("Error reading message: %s\n", err)
-			return err
+			if err == io.ErrUnexpectedEOF {
+				// sender stopped sending
+				return nil
+			} else {
+				return fmt.Errorf("Error reading message: %s\n", err)
+			}
 		}
 		tEnd := time.Now()
 		nTot += n
@@ -124,7 +151,7 @@ func startListener(lAddr *net.UDPAddr) error {
 		// MBit/s
 		curRate := float64(n) / tCur / 1000000.0 * 8.0
 		totRate := float64(nTot) / tTot / 1000000.0 * 8.0
-		fmt.Printf("%d cur: %.1fMBit/s (%.1fMB in %.2fs), tot: %.1fMBit/s (%.1fMB in %.2fs)\n", lAddr.Port, curRate, float64(n)/1000000, tCur, totRate, float64(nTot)/1000000, tTot)
+		fmt.Printf("%d_%d cur: %.1fMBit/s (%.1fMB in %.2fs), tot: %.1fMBit/s (%.1fMB in %.2fs)\n", lPort, rPort, curRate, float64(n)/1000000, tCur, totRate, float64(nTot)/1000000, tTot)
 	}
 	return nil
 }
@@ -132,16 +159,42 @@ func startListener(lAddr *net.UDPAddr) error {
 func main() {
 	flag.Parse()
 	errs := make(chan error)
-	for i := 0; i < *nConnections; i++ {
+	var wg sync.WaitGroup
+	wg.Add(*portRange * *nConnections)
+	for i := 0; i < *portRange; i++ {
 		go func(port int) {
-			if err := startListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port}); err != nil {
-				errs <- err
+			listener, err := getQuicListener(&net.UDPAddr{IP: net.ParseIP(*listenAddr), Port: port})
+			if err != nil {
+				errs <- fmt.Errorf("Error starting QUIC listener: %s", err)
+				return
+			}
+			// defer listener.Close()
+			fmt.Printf("Listening for QUIC connections on %s\n", listener.Addr().String())
+			for j := 0; j < *nConnections; j++ {
+				session, stream, err := acceptStream(listener)
+				if err != nil {
+					errs <- err
+					return
+				}
+				go func(se quic.Session, st quic.Stream) {
+					defer wg.Done()
+					if err := listenOnStream(se, st); err != nil {
+						errs <- err
+					}
+				}(session, stream)
 			}
 		}(*listenPort + i)
 	}
+	closeChannel := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(closeChannel)
+	}()
 	select {
 	case err := <-errs:
 		fmt.Printf("Error encountered (%s), stopping all listeners\n", err)
 		os.Exit(1)
+	case <-closeChannel:
+		fmt.Println("Exiting without errors")
 	}
 }

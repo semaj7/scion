@@ -36,6 +36,7 @@ name: 'default_experiment'
 use_scion: True
 use_shaping: True
 num_flows: 2
+max_data: 5000000
 
 # Host Adresses and roles
 
@@ -46,18 +47,21 @@ hosts:
         local_ip: 172.31.27.114
         scionaddr: 16-ffaa:0:1007,[172.31.27.114]
         location: Singapore
+        tshark_net_interface: ens5
     scionlab-1004-rtt:
         ip: 3.12.159.15
         ia: 16-ffaa:0:1004
         local_ip: 172.31.2.128
         scionaddr: 16-ffaa:0:1004,[172.31.2.128]
         location: Ohio
+        tshark_net_interface: ens5
     scionlab-1102-rtt:
         ip: 129.132.121.187
         ia: 17-ffaa:0:1102
         local_ip: 129.132.121.187
         scionaddr: 17-ffaa:0:1102,[129.132.121.187] #unused at the moment
         location: CAB
+        tshark_net_interface: ens3
 
 hostname_label_map:
     scionlab-1007-rtt: h1
@@ -66,8 +70,8 @@ hostname_label_map:
     james-linux-host: tester
 
 label_role_map:
-    h1: receiver
-    h2: off
+    h1: off
+    h2: receiver
     m: sender
     tester: tester
 
@@ -76,21 +80,20 @@ label_role_map:
 
 local_port_start_range: 6000
 listener_port: 5500
-tshark_net_interface: 'lo'
 
 
 # Source locations
 
-scion_location: '/home/james/go/src/github.com/scionproto/scion'
+scion_location: '/home/cyrill/go/src/github.com/scionproto/scion'
 
 valloc_python_command: "pyhton2"
-valloc_location: '/home/james/bitbucket/csl331/vAlloc/vAlloc.py'
+valloc_location: '/home/cyrill/bitbucket/csl331/vAlloc/vAlloc.py'
 
 athena_python_command: "pyhton3.6"
-atchena_location: '/home/james/bitbucket/csl331/dbus/athena_m2.py'
+atchena_location: '/home/cyrill/bitbucket/csl331/dbus/athena_m2.py'
 
-ftsocket_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket'
-quic_listener_location: '/home/james/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/listener/linux_amd64_stripped/flowtele_listener'
+ftsocket_location: '/home/cyrill/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/linux_amd64_stripped/flowtele_socket'
+quic_listener_location: '/home/cyrill/go/src/github.com/scionproto/scion/bazel-bin/go/flowtele/listener/linux_amd64_stripped/flowtele_listener'
 
 print_to_console: True
 
@@ -113,7 +116,7 @@ fshaper_log:
 # Timing
 sender_delay_time: 2
 send_duration: 10 # In seconds
-calibrator_duration: 2
+calibrator_duration: 60
 
 # Postprocessing
 truncate_front: 2

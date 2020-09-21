@@ -2,7 +2,6 @@ package flowteledbus
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -97,7 +96,7 @@ func (db *DbusBase) ShouldSendSignal(s DbusSignal) bool {
 	}
 }
 
-func (db *DbusBase) Send(s DbusSignal) {
+func (db *DbusBase) Send(s DbusSignal) error {
 	var logSignal bool
 	if db.LogSignals {
 		t := s.SignalType()
@@ -132,38 +131,47 @@ func (db *DbusBase) Send(s DbusSignal) {
 			db.logMessagesSkipped[t] = 0
 		}
 	}
-	if err := db.Conn.Emit(db.ObjectPath, db.InterfaceName+"."+s.Name(), s.Values()...); err != nil {
-		panic(err)
-	}
+	return db.Conn.Emit(db.ObjectPath, db.InterfaceName+"."+s.Name(), s.Values()...)
 }
 
-func (db *DbusBase) OpenSessionBus() {
+func (db *DbusBase) OpenSessionBus() error {
 	var err error
-	db.Conn, err = dbus.SessionBus()
+	// open private session bus for each DbusBase object
+	db.Conn, err = dbus.SessionBusPrivate()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
-		os.Exit(1)
+		return fmt.Errorf("Failed to connect to session bus: %s", err)
+	}
+
+	// initialize session bus (is done automatically in dbus.SessionBus())
+	if err = db.Conn.Auth(nil); err != nil {
+		_ = db.Conn.Close()
+		return err
+	}
+	if err = db.Conn.Hello(); err != nil {
+		_ = db.Conn.Close()
+		return err
 	}
 
 	reply, err := db.Conn.RequestName(db.ServiceName, dbus.NameFlagDoNotQueue)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("Failed to request name: %s", err)
 	}
 	if reply != dbus.RequestNameReplyPrimaryOwner {
-		fmt.Fprintf(os.Stderr, "name (%s) already taken\n", db.ServiceName)
-		os.Exit(1)
+		return fmt.Errorf("Name (%s) already taken", db.ServiceName)
 	}
+	return nil
 }
 
 func (db *DbusBase) Close() {
 	db.Conn.Close()
+	db.Conn = nil
 }
 
-func (db *DbusBase) registerMethods() {
-	db.Conn.Export(db.ExportedMethods, db.ObjectPath, db.InterfaceName)
+func (db *DbusBase) registerMethods() error {
+	return db.Conn.Export(db.ExportedMethods, db.ObjectPath, db.InterfaceName)
 }
 
-func (db *DbusBase) registerSignalListeners() {
+func (db *DbusBase) registerSignalListeners() error {
 	if err := db.Conn.AddMatchSignal(
 		db.SignalMatchOptions...,
 	// dbus.WithMatchObjectPath(db.ObjectPath),
@@ -171,14 +179,17 @@ func (db *DbusBase) registerSignalListeners() {
 	// dbus.WithMatchMember("mysignal"),
 	// dbus.WithMatchSender(REMOTE_SERVICE_NAME),
 	); err != nil {
-		panic(err)
+		return err
 	}
 
+	// todo(cyrill) adjust the max number of buffered signals (maybe n_connection*n_signal_types to
+	// allow one signal from each connection to be buffered?)
 	db.SignalListener = make(chan *dbus.Signal, 1)
 	db.Conn.Signal(db.SignalListener)
+	return nil
 }
 
-func (db *DbusBase) registerIntrospectMethod() {
+func (db *DbusBase) registerIntrospectMethod() error {
 	// fmt.Printf("Name: %s, methods: %+v\n", db.InterfaceName, introspect.Methods(db.ExportedMethods))
 	n := &introspect.Node{
 		Name: string(db.ObjectPath),
@@ -191,13 +202,20 @@ func (db *DbusBase) registerIntrospectMethod() {
 			},
 		},
 	}
-	db.Conn.Export(introspect.NewIntrospectable(n), db.ObjectPath, "org.freedesktop.DBus.Introspectable")
+	return db.Conn.Export(introspect.NewIntrospectable(n), db.ObjectPath, "org.freedesktop.DBus.Introspectable")
 }
 
-func (db *DbusBase) Register() {
-	db.registerMethods()
-	db.registerSignalListeners()
-	db.registerIntrospectMethod()
+func (db *DbusBase) Register() error {
+	if err := db.registerMethods(); err != nil {
+		return err
+	}
+	if err := db.registerSignalListeners(); err != nil {
+		return err
+	}
+	if err := db.registerIntrospectMethod(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (db *DbusBase) Log(formatString string, args ...interface{}) {

@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/bin/env python3.6
 #Debugging:
 # sudo python3.5 logparser.py  results/25/2/200/100/cubic/TCP-1_STABLE-1/2020-05-01--15-54-30/
 
