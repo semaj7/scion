@@ -20,6 +20,10 @@ import (
 	"github.com/scionproto/scion/go/lib/sock/reliable"
 )
 
+const (
+	errorNoError quic.ErrorCode = 0x100
+)
+
 var (
 	tlsConfig   tls.Config
 	localIAFlag addr.IA
@@ -54,7 +58,7 @@ func initTlsCert() error {
 }
 
 func getQuicListener(lAddr *net.UDPAddr) (quic.Listener, error) {
-	quicConfig := &quic.Config{IdleTimeout: time.Hour}
+	quicConfig := &quic.Config{MaxIdleTimeout: time.Hour}
 	if *useScion {
 		dispatcher := *dispatcherFlag
 		sciondAddr := *sciondAddrFlag
@@ -88,14 +92,15 @@ func getQuicListener(lAddr *net.UDPAddr) (quic.Listener, error) {
 }
 
 func acceptStream(listener quic.Listener) (quic.Session, quic.Stream, error) {
-	session, err := listener.Accept()
+	ctx := context.Background()
+	session, err := listener.Accept(ctx)
 	if err != nil {
 		fmt.Printf("Error accepting sessions: %s\n", err)
 		return nil, nil, err
 	} else {
 		fmt.Println("Accepted session")
 	}
-	stream, err := session.AcceptStream()
+	stream, err := session.AcceptStream(ctx)
 	if err != nil {
 		fmt.Printf("Error accepting streams: %s\n", err)
 		return nil, nil, err
@@ -118,7 +123,7 @@ func getPort(addr net.Addr) (int, error) {
 
 func listenOnStream(session quic.Session, stream quic.Stream) error {
 	// defer stream.Close()
-	defer session.Close()
+	defer session.CloseWithError(errorNoError, "")
 	message := make([]byte, *messageSize)
 	tInit := time.Now()
 	nTot := 0

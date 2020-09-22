@@ -63,7 +63,8 @@ func (s *Server) ListenAndServe() error {
 		return err
 	}
 	for {
-		session, err := s.listener.Accept()
+		ctx := context.Background()
+		session, err := s.listener.Accept(ctx)
 		if err != nil {
 			if strings.Contains(err.Error(), "server closed") {
 				return err
@@ -71,7 +72,7 @@ func (s *Server) ListenAndServe() error {
 			log.Warn("[quic] server accept error", "err", err)
 			continue
 		}
-		if err := s.handleQUICSession(session); err != nil {
+		if err := s.handleQUICSession(ctx, session); err != nil {
 			log.Warn("[quic] server handler exited with error", "err", err)
 		}
 	}
@@ -104,8 +105,8 @@ func (s *Server) Close() error {
 	return s.listener.Close()
 }
 
-func (s *Server) handleQUICSession(session quic.Session) error {
-	stream, err := session.AcceptStream()
+func (s *Server) handleQUICSession(ctx context.Context, session quic.Session) error {
+	stream, err := session.AcceptStream(ctx)
 	if err != nil {
 		return err
 	}
@@ -175,7 +176,7 @@ func (c *Client) Request(ctx context.Context, request *Request, address net.Addr
 	if err := stream.Close(); err != nil {
 		return nil, err
 	}
-	if err := session.Close(); err != nil {
+	if err := session.CloseWithError(0, "Request handled"); err != nil {
 		return nil, err
 	}
 	return &Reply{Message: msg}, nil

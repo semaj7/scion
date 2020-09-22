@@ -343,7 +343,7 @@ func startQuicSender(localAddr *net.UDPAddr, remoteAddr *net.UDPAddr, flowId int
 
 	flowteleSignalInterface := quic.CreateFlowteleSignalInterface(newSrttMeasurement, packetsLost, packetsAcked)
 	// make QUIC idle timout long to allow a delay between starting the listeners and the senders
-	quicConfig := &quic.Config{IdleTimeout: time.Hour,
+	quicConfig := &quic.Config{MaxIdleTimeout: time.Hour,
 		FlowteleSignalInterface: flowteleSignalInterface}
 	tlsConfig := &tls.Config{InsecureSkipVerify: true}
 
@@ -364,7 +364,7 @@ func startQuicSender(localAddr *net.UDPAddr, remoteAddr *net.UDPAddr, flowId int
 	// session.SetFixedRate(rateInBitsPerSecond)
 	// qdbus.Log("set fixed rate %f...", float64(rateInBitsPerSecond)/1000000)
 	qdbus.Log("session established. Opening stream...")
-	stream, err := session.OpenStreamSync()
+	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
 		return fmt.Errorf("Error opening QUIC stream to [%s]: %s", remoteAddr.String(), err)
 	}
